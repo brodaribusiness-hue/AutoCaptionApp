@@ -78,8 +78,8 @@ public class AudioExtractor {
         int sampleRate = audioFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
         int channelCount = audioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
 
-        FileOutputStream pcmOutput = new FileOutputStream(
-                new File(context.getCacheDir(), "temp_pcm.raw"));
+        File tempPcm = new File(context.getCacheDir(), "temp_pcm.raw");
+        FileOutputStream pcmOutput = new FileOutputStream(tempPcm);
 
         MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
         boolean sawInputEOS = false;
@@ -136,11 +136,10 @@ public class AudioExtractor {
         decoder.release();
         extractor.release();
 
-        writeWavFile(
-                new File(context.getCacheDir(), "temp_pcm.raw"),
-                outputFile,
-                sampleRate,
-                channelCount);
+        // Vosk expects mono 16-bit PCM. If the source audio is stereo,
+        // downmix it here — this both fixes accuracy and roughly halves
+        // the data the recognizer has to process (faster recognition).
+        writeWavFile(tempPcm, outputFile, sampleRate, channelCount);
     }
 
     private static void writeWavFile(
@@ -149,11 +148,84 @@ public class AudioExtractor {
             int sampleRate,
             int channels) throws Exception {
 
-        long pcmSize = pcmFile.length();
+        java.io.FileInputStream in = new java.io.FileInputStream(pcmFile);
+
+        long pcmSize;
+        int outputChannels = 1; // we always output mono
+
+        if (channels == 2) {
+            // Downmix stereo 16-bit PCM to mono by averaging L+R samples.
+            File monoFile = new File(pcmFile.getParentFile(), "temp_pcm_mono.raw");
+            FileOutputStream monoOut = new FileOutputStream(monoFile);
+
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            byte[] leftover = null;
+
+            while ((bytesRead = in.read(buffer)) != -1) {
+                byte[] chunk = buffer;
+                int len = bytesRead;
+
+                if (leftover != null) {
+                    byte[] combined = new byte[leftover.length + len];
+                    System.arraycopy(leftover, 0, combined, 0, leftover.length);
+                    System.arraycopy(buffer, 0, combined, leftover.length, len);
+                    chunk = combined;
+                    len = combined.length;
+                    leftover = null;
+                }
+
+                // Need whole stereo sample pairs (4 bytes = 2 samples of
+                // 16-bit each = 1 stereo frame). Keep any remainder for
+                // the next read.
+                int usableLen = len - (len % 4);
+                if (usableLen < len) {
+                    leftover = new byte[len - usableLen];
+                    System.arraycopy(chunk, usableLen, leftover, 0, leftover.length);
+                }
+
+                byte[] monoChunk = new byte[usableLen / 2];
+                int monoIndex = 0;
+
+                for (int i = 0; i < usableLen; i += 4) {
+                    short left = (short) ((chunk[i] & 0xff) | (chunk[i + 1] << 8));
+                    short right = (short) ((chunk[i + 2] & 0xff) | (chunk[i + 3] << 8));
+                    short mono = (short) ((left + right) / 2);
+
+                    monoChunk[monoIndex++] = (byte) (mono & 0xff);
+                    monoChunk[monoIndex++] = (byte) ((mono >> 8) & 0xff);
+                }
+
+                monoOut.write(monoChunk, 0, monoIndex);
+            }
+
+            monoOut.close();
+            in.close();
+            pcmFile.delete();
+
+            in = new java.io.FileInputStream(monoFile);
+            pcmSize = monoFile.length();
+
+            writeHeaderAndCopy(in, wavFile, sampleRate, outputChannels, pcmSize);
+            monoFile.delete();
+
+        } else {
+            pcmSize = pcmFile.length();
+            writeHeaderAndCopy(in, wavFile, sampleRate, outputChannels, pcmSize);
+            pcmFile.delete();
+        }
+    }
+
+    private static void writeHeaderAndCopy(
+            java.io.FileInputStream in,
+            File wavFile,
+            int sampleRate,
+            int channels,
+            long pcmSize) throws Exception {
+
         long totalSize = pcmSize + 36;
 
         FileOutputStream out = new FileOutputStream(wavFile);
-        java.io.FileInputStream in = new java.io.FileInputStream(pcmFile);
 
         int byteRate = sampleRate * channels * 2;
 
@@ -195,6 +267,5 @@ public class AudioExtractor {
 
         in.close();
         out.close();
-        pcmFile.delete();
     }
 }
