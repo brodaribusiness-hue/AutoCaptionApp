@@ -328,5 +328,7 @@ public class MainActivity extends Activity {
             mediaPlayer.release();
             mediaPlayer = null;
         }
+
+        SpeechToText.releaseModel();
     }
 }
