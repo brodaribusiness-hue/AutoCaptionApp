@@ -3,6 +3,8 @@ package com.saad.autocaption;
 import android.app.Activity;
 import android.graphics.PixelFormat;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.content.Intent;
 import android.net.Uri;
 import android.view.View;
@@ -12,6 +14,7 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.media.MediaPlayer;
 import java.io.File;
+import java.util.List;
 
 public class MainActivity extends Activity {
 
@@ -21,7 +24,11 @@ public class MainActivity extends Activity {
     private SurfaceHolder surfaceHolder;
     private MediaPlayer mediaPlayer;
     private TextView statusText;
+    private TextView captionText;
     private Uri videoUri;
+    private List<Caption> captions;
+    private Handler captionUpdateHandler;
+    private Runnable captionUpdateRunnable;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -29,8 +36,11 @@ public class MainActivity extends Activity {
         setContentView(R.layout.layout_main);
 
         videoSurface = (SurfaceView) findViewById(R.id.videoSurface);
+        captionText = (TextView) findViewById(R.id.captionText);
         Button button = (Button) findViewById(R.id.selectVideoButton);
         statusText = (TextView) findViewById(R.id.statusText);
+
+        captionUpdateHandler = new Handler(Looper.getMainLooper());
 
         surfaceHolder = videoSurface.getHolder();
         surfaceHolder.setFormat(PixelFormat.TRANSLUCENT);
@@ -55,6 +65,7 @@ public class MainActivity extends Activity {
 
             @Override
             public void surfaceDestroyed(SurfaceHolder holder) {
+                stopCaptionUpdates();
                 if (mediaPlayer != null) {
                     mediaPlayer.release();
                     mediaPlayer = null;
@@ -187,8 +198,11 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
+                                captions = CaptionParser.parseVoskResult(jsonResult);
                                 statusText.setText(
-                                        "Recognition done:\n" + jsonResult);
+                                        "Captions ready! (" +
+                                        captions.size() + " words)");
+                                startCaptionUpdates();
                             }
                         });
                     }
@@ -203,6 +217,28 @@ public class MainActivity extends Activity {
                         });
                     }
                 });
+    }
+
+    private void startCaptionUpdates() {
+        captionUpdateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (mediaPlayer != null && mediaPlayer.isPlaying() && captions != null) {
+                    long currentTimeMs = mediaPlayer.getCurrentPosition();
+                    String currentCaption = CaptionParser.getCaptionAtTime(
+                            captions, currentTimeMs);
+                    captionText.setText(currentCaption);
+                }
+                captionUpdateHandler.postDelayed(this, 100);
+            }
+        };
+        captionUpdateHandler.post(captionUpdateRunnable);
+    }
+
+    private void stopCaptionUpdates() {
+        if (captionUpdateRunnable != null) {
+            captionUpdateHandler.removeCallbacks(captionUpdateRunnable);
+        }
     }
 
     private void playVideo(Uri uri) {
@@ -257,6 +293,8 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
 
         super.onDestroy();
+
+        stopCaptionUpdates();
 
         if (mediaPlayer != null) {
             mediaPlayer.release();
