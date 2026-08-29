@@ -18,8 +18,6 @@ public class SpeechToText {
         void onError(String message);
     }
 
-    // Simple in-process model cache so we don't reload the (large) Vosk
-    // model from disk every time the user picks a new video.
     private static Model cachedModel;
     private static String cachedModelPath;
 
@@ -52,16 +50,15 @@ public class SpeechToText {
                     recognizer = new Recognizer(model, sampleRate);
                     recognizer.setWords(true);
 
-                    mainHandler.post(() -> callback.onProgress("Recognizing speech..."));
-
                     inputStream = new FileInputStream(wavFile);
-                    // Skip to the actual start of PCM audio data, not a
-                    // hardcoded 44 bytes — WAV headers can carry extra
-                    // chunks (LIST, fmt extensions, etc.) before "data".
                     long skipped = inputStream.skip(wavInfo.dataOffset);
                     if (skipped != wavInfo.dataOffset) {
                         throw new Exception("Could not seek to WAV audio data");
                     }
+
+                    long totalAudioBytes = wavFile.length() - wavInfo.dataOffset;
+                    long bytesProcessed = 0;
+                    int lastReportedPercent = -1;
 
                     byte[] buffer = new byte[4096];
                     int bytesRead;
@@ -69,6 +66,17 @@ public class SpeechToText {
 
                     while ((bytesRead = inputStream.read(buffer)) >= 0) {
                         finalRecognizer.acceptWaveForm(buffer, bytesRead);
+
+                        bytesProcessed += bytesRead;
+                        if (totalAudioBytes > 0) {
+                            int percent = (int) (bytesProcessed * 100 / totalAudioBytes);
+                            if (percent != lastReportedPercent) {
+                                lastReportedPercent = percent;
+                                int finalPercent = percent;
+                                mainHandler.post(() -> callback.onProgress(
+                                        "Recognizing speech... " + finalPercent + "%"));
+                            }
+                        }
                     }
 
                     String finalResult = recognizer.getFinalResult();
@@ -79,8 +87,6 @@ public class SpeechToText {
                     mainHandler.post(() -> callback.onError(
                             "Speech recognition failed: " + e.getMessage()));
                 } finally {
-                    // Always release native/file resources, even on error,
-                    // to avoid leaking memory or file handles.
                     if (inputStream != null) {
                         try {
                             inputStream.close();
@@ -90,20 +96,11 @@ public class SpeechToText {
                     if (recognizer != null) {
                         recognizer.close();
                     }
-                    // Note: the cached Model itself is intentionally NOT
-                    // closed here — it's reused across calls. Call
-                    // releaseModel() when the app no longer needs it
-                    // (e.g. onDestroy of the last activity that uses it).
                 }
             }
         }).start();
     }
 
-    /**
-     * Returns a cached Model if one is already loaded for this modelDir,
-     * otherwise loads it from disk. Vosk models are large, so avoiding a
-     * reload on every video saves significant time and memory churn.
-     */
     private static synchronized Model getOrLoadModel(File modelDir) throws Exception {
         String path = modelDir.getAbsolutePath();
         if (cachedModel == null || !path.equals(cachedModelPath)) {
@@ -116,9 +113,6 @@ public class SpeechToText {
         return cachedModel;
     }
 
-    /** Call this when the app is done with speech recognition entirely
-     * (e.g. in Application.onTerminate or the last Activity's onDestroy)
-     * to free the native model memory. */
     public static synchronized void releaseModel() {
         if (cachedModel != null) {
             cachedModel.close();
@@ -132,11 +126,6 @@ public class SpeechToText {
         long dataOffset;
     }
 
-    /**
-     * Properly walks the WAV RIFF chunk structure to find the "fmt " chunk
-     * (for sample rate) and the "data" chunk (for the real audio start
-     * offset), instead of assuming a fixed 44-byte header.
-     */
     private static WavInfo readWavInfo(File wavFile) throws Exception {
         WavInfo info = new WavInfo();
 
@@ -161,7 +150,6 @@ public class SpeechToText {
                 if (chunkId.equals("fmt ")) {
                     byte[] fmtBody = new byte[(int) chunkSize];
                     raf.readFully(fmtBody);
-                    // sampleRate is bytes 4-7 of the fmt chunk body
                     int sampleRate = readLE32(fmtBody, 4);
                     info.sampleRate = (float) sampleRate;
                     foundFmt = true;
@@ -169,11 +157,9 @@ public class SpeechToText {
                 } else if (chunkId.equals("data")) {
                     info.dataOffset = raf.getFilePointer();
                     foundData = true;
-                    break; // audio data starts here; stop scanning
+                    break;
 
                 } else {
-                    // Skip any other chunk (LIST, fact, etc.), padded to
-                    // an even number of bytes per the RIFF spec.
                     long skip = chunkSize + (chunkSize % 2);
                     raf.seek(raf.getFilePointer() + skip);
                 }
