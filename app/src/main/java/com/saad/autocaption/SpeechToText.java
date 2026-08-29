@@ -37,7 +37,9 @@ public class SpeechToText {
 
                     Model model = new Model(modelDir.getAbsolutePath());
 
-                    Recognizer recognizer = new Recognizer(model, 48000.0f);
+                    float sampleRate = readSampleRateFromWav(wavFile);
+
+                    Recognizer recognizer = new Recognizer(model, sampleRate);
                     recognizer.setWords(true);
 
                     mainHandler.post(new Runnable() {
@@ -84,5 +86,20 @@ public class SpeechToText {
                 }
             }
         }).start();
+    }
+
+    private static float readSampleRateFromWav(File wavFile) throws Exception {
+        FileInputStream fis = new FileInputStream(wavFile);
+        byte[] header = new byte[44];
+        fis.read(header);
+        fis.close();
+
+        int sampleRate =
+                (header[24] & 0xff) |
+                ((header[25] & 0xff) << 8) |
+                ((header[26] & 0xff) << 16) |
+                ((header[27] & 0xff) << 24);
+
+        return (float) sampleRate;
     }
 }
