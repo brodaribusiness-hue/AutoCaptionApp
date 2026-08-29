@@ -220,30 +220,48 @@ public class MainActivity extends Activity {
     }
 
     private void startCaptionUpdates() {
-        captionUpdateRunnable = new Runnable() {
-            @Override
-            public void run() {
-                if (mediaPlayer != null && mediaPlayer.isPlaying() && captions != null) {
-                    long currentTimeMs = mediaPlayer.getCurrentPosition();
+    captionUpdateRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (mediaPlayer != null && mediaPlayer.isPlaying() && captions != null) {
+                long currentTimeMs = mediaPlayer.getCurrentPosition();
 
-                    StringBuilder displayText = new StringBuilder();
-                    for (int i = 0; i < captions.size(); i++) {
-                        Caption cap = captions.get(i);
-                        if (currentTimeMs >= cap.startTime * 1000 &&
-                                currentTimeMs < cap.endTime * 1000) {
-                            displayText.append("*").append(cap.word).append("* ");
-                        } else if (currentTimeMs >= (cap.startTime - 1) * 1000 &&
-                                currentTimeMs < (cap.endTime + 2) * 1000) {
-                            displayText.append(cap.word).append(" ");
-                        }
+                android.text.SpannableStringBuilder builder =
+                        new android.text.SpannableStringBuilder();
+
+                for (int i = 0; i < captions.size(); i++) {
+                    Caption cap = captions.get(i);
+
+                    boolean isCurrent = currentTimeMs >= cap.startTime * 1000 &&
+                            currentTimeMs < cap.endTime * 1000;
+
+                    boolean isNearby = currentTimeMs >= (cap.startTime - 1) * 1000 &&
+                            currentTimeMs < (cap.endTime + 2) * 1000;
+
+                    if (isCurrent) {
+                        int start = builder.length();
+                        builder.append(cap.word).append(" ");
+                        int end = builder.length();
+
+                        builder.setSpan(
+                                new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                                start, end, 0);
+                        builder.setSpan(
+                                new android.text.style.ForegroundColorSpan(0xFFFFFF00),
+                                start, end, 0);
+
+                    } else if (isNearby) {
+                        builder.append(cap.word).append(" ");
                     }
-                    captionText.setText(displayText.toString());
                 }
-                captionUpdateHandler.postDelayed(this, 100);
+
+                captionText.setText(builder);
             }
-        };
-        captionUpdateHandler.post(captionUpdateRunnable);
-    }
+            captionUpdateHandler.postDelayed(this, 100);
+        }
+    };
+    captionUpdateHandler.post(captionUpdateRunnable);
+}
 
     private void stopCaptionUpdates() {
         if (captionUpdateRunnable != null) {
