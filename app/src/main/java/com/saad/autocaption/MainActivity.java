@@ -11,6 +11,7 @@ import android.view.SurfaceHolder;
 import android.widget.Button;
 import android.widget.TextView;
 import android.media.MediaPlayer;
+import java.io.File;
 
 public class MainActivity extends Activity {
 
@@ -90,7 +91,44 @@ public class MainActivity extends Activity {
             videoUri = data.getData();
 
             playVideo(videoUri);
+
+            extractAudio(videoUri);
         }
+    }
+
+    private void extractAudio(Uri uri) {
+
+        statusText.setText("Extracting audio...");
+
+        AudioExtractor.extractAudioToWav(
+                this,
+                uri,
+                new AudioExtractor.ExtractCallback() {
+
+                    @Override
+                    public void onSuccess(File wavFile) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                statusText.setText(
+                                        "Audio extracted: " +
+                                        wavFile.getName() +
+                                        " (" + wavFile.length() +
+                                        " bytes)");
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                statusText.setText(message);
+                            }
+                        });
+                    }
+                });
     }
 
     private void playVideo(Uri uri) {
@@ -112,8 +150,6 @@ public class MainActivity extends Activity {
 
                 @Override
                 public void onPrepared(MediaPlayer mp) {
-
-                    statusText.setText("Video playing");
 
                     mp.setLooping(true);
                     mp.start();
