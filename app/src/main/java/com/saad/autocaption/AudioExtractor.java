@@ -75,8 +75,12 @@ public class AudioExtractor {
         decoder.configure(audioFormat, null, null, 0);
         decoder.start();
 
+        // These are just fallback/initial guesses from the *input* format.
+        // The real values come from the decoder's OUTPUT format below,
+        // which is what the PCM data we write actually is.
         int sampleRate = audioFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
         int channelCount = audioFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+        boolean gotOutputFormat = false;
 
         File tempPcm = new File(context.getCacheDir(), "temp_pcm.raw");
         FileOutputStream pcmOutput = new FileOutputStream(tempPcm);
@@ -113,7 +117,16 @@ public class AudioExtractor {
             int outputBufferIndex =
                     decoder.dequeueOutputBuffer(bufferInfo, 10000);
 
-            if (outputBufferIndex >= 0) {
+            if (outputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                // THIS is the real, authoritative format of the PCM data
+                // the decoder will actually produce. Input format's
+                // declared sample rate/channels can differ from this.
+                MediaFormat outputFormat = decoder.getOutputFormat();
+                sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
+                channelCount = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
+                gotOutputFormat = true;
+
+            } else if (outputBufferIndex >= 0) {
 
                 ByteBuffer outputBuffer =
                         decoder.getOutputBuffer(outputBufferIndex);
@@ -136,9 +149,12 @@ public class AudioExtractor {
         decoder.release();
         extractor.release();
 
-        // Vosk expects mono 16-bit PCM. If the source audio is stereo,
-        // downmix it here — this both fixes accuracy and roughly halves
-        // the data the recognizer has to process (faster recognition).
+        if (!gotOutputFormat) {
+            // Some devices/codecs never fire the format-changed event if
+            // output already matches input — in that case the input
+            // format's values were correct all along, so we proceed.
+        }
+
         writeWavFile(tempPcm, outputFile, sampleRate, channelCount);
     }
 
@@ -154,7 +170,6 @@ public class AudioExtractor {
         int outputChannels = 1; // we always output mono
 
         if (channels == 2) {
-            // Downmix stereo 16-bit PCM to mono by averaging L+R samples.
             File monoFile = new File(pcmFile.getParentFile(), "temp_pcm_mono.raw");
             FileOutputStream monoOut = new FileOutputStream(monoFile);
 
@@ -175,9 +190,6 @@ public class AudioExtractor {
                     leftover = null;
                 }
 
-                // Need whole stereo sample pairs (4 bytes = 2 samples of
-                // 16-bit each = 1 stereo frame). Keep any remainder for
-                // the next read.
                 int usableLen = len - (len % 4);
                 if (usableLen < len) {
                     leftover = new byte[len - usableLen];
