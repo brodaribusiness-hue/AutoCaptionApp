@@ -25,7 +25,10 @@ public class MainActivity extends Activity {
     private MediaPlayer mediaPlayer;
     private TextView statusText;
     private TextView captionText;
+    private Button generateCaptionsButton;
+    private Button exportButton;
     private Uri videoUri;
+    private File extractedWavFile;
     private List<Caption> captions;
     private Handler captionUpdateHandler;
     private Runnable captionUpdateRunnable;
@@ -37,12 +40,16 @@ public class MainActivity extends Activity {
 
         videoSurface = (SurfaceView) findViewById(R.id.videoSurface);
         captionText = (TextView) findViewById(R.id.captionText);
-        Button button = (Button) findViewById(R.id.selectVideoButton);
+        Button selectVideoButton = (Button) findViewById(R.id.selectVideoButton);
+        generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
+        exportButton = (Button) findViewById(R.id.exportButton);
         statusText = (TextView) findViewById(R.id.statusText);
 
-        // Needed so setShadowLayer() (used for the glow effect) actually
-        // renders — hardware-accelerated views ignore shadow layers.
         captionText.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+
+        // Disabled until a video is selected / captions exist.
+        generateCaptionsButton.setEnabled(false);
+        exportButton.setEnabled(false);
 
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
@@ -77,7 +84,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        button.setOnClickListener(new View.OnClickListener() {
+        selectVideoButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
 
@@ -87,6 +94,27 @@ public class MainActivity extends Activity {
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
 
                 startActivityForResult(intent, PICK_VIDEO);
+            }
+        });
+
+        generateCaptionsButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (videoUri != null) {
+                    generateCaptionsButton.setEnabled(false);
+                    captions = null;
+                    captionText.setText("");
+                    extractAudio(videoUri);
+                }
+            }
+        });
+
+        exportButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Full burn-into-MP4 export isn't implemented yet — this
+                // is a placeholder until that feature is built.
+                statusText.setText("Export coming soon");
             }
         });
     }
@@ -104,10 +132,14 @@ public class MainActivity extends Activity {
                 data != null) {
 
             videoUri = data.getData();
+            captions = null;
+            captionText.setText("");
+            exportButton.setEnabled(false);
 
             playVideo(videoUri);
 
-            extractAudio(videoUri);
+            statusText.setText("Video loaded. Tap 'Generate Captions' to continue.");
+            generateCaptionsButton.setEnabled(true);
         }
     }
 
@@ -125,6 +157,7 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
+                                extractedWavFile = wavFile;
                                 setupModelAndRecognize(wavFile);
                             }
                         });
@@ -136,6 +169,7 @@ public class MainActivity extends Activity {
                             @Override
                             public void run() {
                                 statusText.setText(message);
+                                generateCaptionsButton.setEnabled(true);
                             }
                         });
                     }
@@ -174,6 +208,7 @@ public class MainActivity extends Activity {
                             @Override
                             public void run() {
                                 statusText.setText(message);
+                                generateCaptionsButton.setEnabled(true);
                             }
                         });
                     }
@@ -206,6 +241,8 @@ public class MainActivity extends Activity {
                                 statusText.setText(
                                         "Captions ready! (" +
                                         captions.size() + " words)");
+                                generateCaptionsButton.setEnabled(true);
+                                exportButton.setEnabled(true);
                                 startCaptionUpdates();
                             }
                         });
@@ -217,6 +254,7 @@ public class MainActivity extends Activity {
                             @Override
                             public void run() {
                                 statusText.setText(message);
+                                generateCaptionsButton.setEnabled(true);
                             }
                         });
                     }
@@ -233,7 +271,6 @@ public class MainActivity extends Activity {
                     long currentTimeMs = mediaPlayer.getCurrentPosition();
                     float currentTimeSec = currentTimeMs / 1000.0f;
 
-                    // The word actually being spoken right now (if any).
                     int matchedIndex = -1;
                     for (int i = 0; i < captions.size(); i++) {
                         Caption cap = captions.get(i);
@@ -244,8 +281,6 @@ public class MainActivity extends Activity {
                         }
                     }
 
-                    // Anchor point for choosing which 4-5 word window to
-                    // show, even during small gaps between words.
                     int anchorIndex = matchedIndex;
                     if (anchorIndex == -1) {
                         for (int i = 0; i < captions.size(); i++) {
@@ -276,8 +311,6 @@ public class MainActivity extends Activity {
                         int end = builder.length();
 
                         if (i == matchedIndex) {
-                            // Low, soft glow on the word currently being
-                            // spoken.
                             builder.setSpan(
                                     new GlowSpan(
                                             0xFFFFFFFF,
