@@ -130,3 +130,137 @@ public class MainActivity extends Activity {
     private void setupModelAndRecognize(File wavFile) {
 
         ModelManager.downloadAndSetupModel(
+                this,
+                new ModelManager.ModelCallback() {
+
+                    @Override
+                    public void onProgress(String message) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                statusText.setText(message);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onSuccess(File modelDir) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                runSpeechRecognition(modelDir, wavFile);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                statusText.setText(message);
+                            }
+                        });
+                    }
+                });
+    }
+
+    private void runSpeechRecognition(File modelDir, File wavFile) {
+
+        SpeechToText.recognize(
+                modelDir,
+                wavFile,
+                new SpeechToText.ResultCallback() {
+
+                    @Override
+                    public void onProgress(String message) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                statusText.setText(message);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onSuccess(String jsonResult) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                statusText.setText(
+                                        "Recognition done:\n" + jsonResult);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                statusText.setText(message);
+                            }
+                        });
+                    }
+                });
+    }
+
+    private void playVideo(Uri uri) {
+
+        try {
+
+            if (mediaPlayer != null) {
+                mediaPlayer.reset();
+            } else {
+                mediaPlayer = new MediaPlayer();
+            }
+
+            mediaPlayer.setDataSource(this, uri);
+
+            mediaPlayer.setDisplay(surfaceHolder);
+
+            mediaPlayer.setOnPreparedListener(
+                    new MediaPlayer.OnPreparedListener() {
+
+                @Override
+                public void onPrepared(MediaPlayer mp) {
+
+                    mp.setLooping(true);
+                    mp.start();
+                }
+            });
+
+            mediaPlayer.setOnErrorListener(
+                    new MediaPlayer.OnErrorListener() {
+
+                @Override
+                public boolean onError(
+                        MediaPlayer mp,
+                        int what,
+                        int extra) {
+
+                    statusText.setText("Playback error");
+                    return true;
+                }
+            });
+
+            mediaPlayer.prepareAsync();
+
+        } catch (Exception e) {
+
+            statusText.setText(
+                    "Error: " + e.getMessage());
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+
+        super.onDestroy();
+
+        if (mediaPlayer != null) {
+            mediaPlayer.release();
+            mediaPlayer = null;
+        }
+    }
+}
