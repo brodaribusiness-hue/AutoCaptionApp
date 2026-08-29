@@ -40,6 +40,10 @@ public class MainActivity extends Activity {
         Button button = (Button) findViewById(R.id.selectVideoButton);
         statusText = (TextView) findViewById(R.id.statusText);
 
+        // Needed so setShadowLayer() (used for the glow effect) actually
+        // renders — hardware-accelerated views ignore shadow layers.
+        captionText.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
         surfaceHolder = videoSurface.getHolder();
@@ -220,48 +224,89 @@ public class MainActivity extends Activity {
     }
 
     private void startCaptionUpdates() {
-    captionUpdateRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (mediaPlayer != null && mediaPlayer.isPlaying() && captions != null) {
-                long currentTimeMs = mediaPlayer.getCurrentPosition();
+        captionUpdateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (mediaPlayer != null && mediaPlayer.isPlaying() &&
+                        captions != null && !captions.isEmpty()) {
 
-                android.text.SpannableStringBuilder builder =
-                        new android.text.SpannableStringBuilder();
+                    long currentTimeMs = mediaPlayer.getCurrentPosition();
+                    float currentTimeSec = currentTimeMs / 1000.0f;
 
-                for (int i = 0; i < captions.size(); i++) {
-                    Caption cap = captions.get(i);
+                    // The word actually being spoken right now (if any).
+                    int matchedIndex = -1;
+                    for (int i = 0; i < captions.size(); i++) {
+                        Caption cap = captions.get(i);
+                        if (currentTimeSec >= cap.startTime &&
+                                currentTimeSec < cap.endTime) {
+                            matchedIndex = i;
+                            break;
+                        }
+                    }
 
-                    boolean isCurrent = currentTimeMs >= cap.startTime * 1000 &&
-                            currentTimeMs < cap.endTime * 1000;
+                    // Anchor point for choosing which 4-5 word window to
+                    // show, even during small gaps between words.
+                    int anchorIndex = matchedIndex;
+                    if (anchorIndex == -1) {
+                        for (int i = 0; i < captions.size(); i++) {
+                            if (captions.get(i).startTime > currentTimeSec) {
+                                anchorIndex = Math.max(0, i - 1);
+                                break;
+                            }
+                        }
+                        if (anchorIndex == -1) {
+                            anchorIndex = captions.size() - 1;
+                        }
+                    }
 
-                    boolean isNearby = currentTimeMs >= (cap.startTime - 1) * 1000 &&
-                            currentTimeMs < (cap.endTime + 2) * 1000;
+                    int wordsBefore = 2;
+                    int wordsAfter = 2;
+                    int startIdx = Math.max(0, anchorIndex - wordsBefore);
+                    int endIdx = Math.min(
+                            captions.size() - 1, anchorIndex + wordsAfter);
 
-                    if (isCurrent) {
+                    android.text.SpannableStringBuilder builder =
+                            new android.text.SpannableStringBuilder();
+
+                    for (int i = startIdx; i <= endIdx; i++) {
+                        Caption cap = captions.get(i);
+
                         int start = builder.length();
-                        builder.append(cap.word).append(" ");
+                        builder.append(cap.word);
                         int end = builder.length();
 
-                        builder.setSpan(
-                                new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
-                                start, end, 0);
-                        builder.setSpan(
-                                new android.text.style.ForegroundColorSpan(0xFFFFFF00),
-                                start, end, 0);
+                        if (i == matchedIndex) {
+                            // Low, soft glow on the word currently being
+                            // spoken.
+                            builder.setSpan(
+                                    new GlowSpan(
+                                            0xFFFFFFFF,
+                                            0xAAFFEB3B,
+                                            10f),
+                                    start, end, 0);
+                            builder.setSpan(
+                                    new android.text.style.StyleSpan(
+                                            android.graphics.Typeface.BOLD),
+                                    start, end, 0);
+                        } else {
+                            builder.setSpan(
+                                    new android.text.style.ForegroundColorSpan(
+                                            0xCCCCCCCC),
+                                    start, end, 0);
+                        }
 
-                    } else if (isNearby) {
-                        builder.append(cap.word).append(" ");
+                        if (i != endIdx) {
+                            builder.append(" ");
+                        }
                     }
-                }
 
-                captionText.setText(builder);
+                    captionText.setText(builder);
+                }
+                captionUpdateHandler.postDelayed(this, 100);
             }
-            captionUpdateHandler.postDelayed(this, 100);
-        }
-    };
-    captionUpdateHandler.post(captionUpdateRunnable);
-}
+        };
+        captionUpdateHandler.post(captionUpdateRunnable);
+    }
 
     private void stopCaptionUpdates() {
         if (captionUpdateRunnable != null) {
