@@ -225,9 +225,19 @@ public class MainActivity extends Activity {
             public void run() {
                 if (mediaPlayer != null && mediaPlayer.isPlaying() && captions != null) {
                     long currentTimeMs = mediaPlayer.getCurrentPosition();
-                    String currentCaption = CaptionParser.getCaptionAtTime(
-                            captions, currentTimeMs);
-                    captionText.setText(currentCaption);
+
+                    StringBuilder displayText = new StringBuilder();
+                    for (int i = 0; i < captions.size(); i++) {
+                        Caption cap = captions.get(i);
+                        if (currentTimeMs >= cap.startTime * 1000 &&
+                                currentTimeMs < cap.endTime * 1000) {
+                            displayText.append("*").append(cap.word).append("* ");
+                        } else if (currentTimeMs >= (cap.startTime - 1) * 1000 &&
+                                currentTimeMs < (cap.endTime + 2) * 1000) {
+                            displayText.append(cap.word).append(" ");
+                        }
+                    }
+                    captionText.setText(displayText.toString());
                 }
                 captionUpdateHandler.postDelayed(this, 100);
             }
