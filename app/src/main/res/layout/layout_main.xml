@@ -1,56 +1,120 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
+<ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
+    android:background="#121212">
 
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Auto Caption"
-        android:textSize="26sp"
-        android:textStyle="bold"
-        android:gravity="center"
-        android:layout_marginBottom="16dp" />
-
-    <FrameLayout
-        android:layout_width="match_parent"
-        android:layout_height="220dp"
-        android:background="#000000">
-
-        <SurfaceView
-            android:id="@+id/videoSurface"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+        android:orientation="vertical"
+        android:padding="16dp">
 
         <TextView
-            android:id="@+id/captionText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
+            android:text="Auto Caption"
+            android:textSize="26sp"
+            android:textStyle="bold"
             android:textColor="#FFFFFF"
+            android:gravity="center"
+            android:layout_marginBottom="16dp" />
+
+        <com.saad.autocaption.AspectRatioFrameLayout
+            android:id="@+id/videoPreviewContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#000000">
+
+            <SurfaceView
+                android:id="@+id/videoSurface"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:id="@+id/captionText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
+                android:layout_gravity="bottom"
+                android:padding="12dp" />
+
+        </com.saad.autocaption.AspectRatioFrameLayout>
+
+        <Button
+            android:id="@+id/selectVideoButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Select Video"
+            android:layout_marginTop="16dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="12dp">
+
+            <Button
+                android:id="@+id/generateCaptionsButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginEnd="6dp"
+                android:text="Generate Captions" />
+
+            <Button
+                android:id="@+id/exportButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="6dp"
+                android:text="Export" />
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Font Style"
+            android:textColor="#CCCCCC"
+            android:textSize="14sp"
+            android:layout_marginTop="16dp" />
+
+        <Spinner
+            android:id="@+id/fontStyleSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#1E1E1E"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Caption Color"
+            android:textColor="#CCCCCC"
+            android:textSize="14sp"
+            android:layout_marginTop="16dp" />
+
+        <Spinner
+            android:id="@+id/captionColorSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#1E1E1E"
+            android:layout_marginTop="4dp" />
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Select a video to start"
             android:textSize="16sp"
-            android:layout_gravity="bottom"
-            android:padding="8dp" />
+            android:textColor="#AAAAAA"
+            android:gravity="center"
+            android:layout_marginTop="20dp" />
 
-    </FrameLayout>
+    </LinearLayout>
 
-    <Button
-        android:id="@+id/selectVideoButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Select Video"
-        android:layout_marginTop="16dp" />
-
-    <TextView
-        android:id="@+id/statusText"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Select a video to start"
-        android:textSize="16sp"
-        android:gravity="center"
-        android:layout_marginTop="16dp" />
-
-</LinearLayout>
+</ScrollView>
