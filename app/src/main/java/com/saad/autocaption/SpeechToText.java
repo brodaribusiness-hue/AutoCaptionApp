@@ -39,6 +39,10 @@ public class SpeechToText {
 
                     float sampleRate = readSampleRateFromWav(wavFile);
 
+                    if (sampleRate < 8000 || sampleRate > 48000) {
+                        sampleRate = 16000.0f;
+                    }
+
                     Recognizer recognizer = new Recognizer(model, sampleRate);
                     recognizer.setWords(true);
 
