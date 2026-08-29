@@ -37,7 +37,7 @@ public class SpeechToText {
 
                     Model model = new Model(modelDir.getAbsolutePath());
 
-                    Recognizer recognizer = new Recognizer(model, 16000.0f);
+                    Recognizer recognizer = new Recognizer(model, 48000.0f);
                     recognizer.setWords(true);
 
                     mainHandler.post(new Runnable() {
