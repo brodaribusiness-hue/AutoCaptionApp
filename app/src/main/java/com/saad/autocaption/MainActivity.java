@@ -110,11 +110,7 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                statusText.setText(
-                                        "Audio extracted: " +
-                                        wavFile.getName() +
-                                        " (" + wavFile.length() +
-                                        " bytes)");
+                                setupModelAndRecognize(wavFile);
                             }
                         });
                     }
@@ -131,62 +127,6 @@ public class MainActivity extends Activity {
                 });
     }
 
-    private void playVideo(Uri uri) {
+    private void setupModelAndRecognize(File wavFile) {
 
-        try {
-
-            if (mediaPlayer != null) {
-                mediaPlayer.reset();
-            } else {
-                mediaPlayer = new MediaPlayer();
-            }
-
-            mediaPlayer.setDataSource(this, uri);
-
-            mediaPlayer.setDisplay(surfaceHolder);
-
-            mediaPlayer.setOnPreparedListener(
-                    new MediaPlayer.OnPreparedListener() {
-
-                @Override
-                public void onPrepared(MediaPlayer mp) {
-
-                    mp.setLooping(true);
-                    mp.start();
-                }
-            });
-
-            mediaPlayer.setOnErrorListener(
-                    new MediaPlayer.OnErrorListener() {
-
-                @Override
-                public boolean onError(
-                        MediaPlayer mp,
-                        int what,
-                        int extra) {
-
-                    statusText.setText("Playback error");
-                    return true;
-                }
-            });
-
-            mediaPlayer.prepareAsync();
-
-        } catch (Exception e) {
-
-            statusText.setText(
-                    "Error: " + e.getMessage());
-        }
-    }
-
-    @Override
-    protected void onDestroy() {
-
-        super.onDestroy();
-
-        if (mediaPlayer != null) {
-            mediaPlayer.release();
-            mediaPlayer = null;
-        }
-    }
-}
+        ModelManager.downloadAndSetupModel(
