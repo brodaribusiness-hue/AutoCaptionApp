@@ -66,7 +66,9 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.layout_main);
-
+private com.saad.autocaption.AspectRatioFrameLayout videoPreviewContainer;
+...
+videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
         videoSurface = (SurfaceView) findViewById(R.id.videoSurface);
         captionText = (TextView) findViewById(R.id.captionText);
         Button selectVideoButton = (Button) findViewById(R.id.selectVideoButton);
