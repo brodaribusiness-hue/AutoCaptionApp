@@ -21,8 +21,10 @@ import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.AdapterView;
 import android.media.MediaPlayer;
+
 import java.io.File;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends Activity {
 
@@ -45,6 +47,15 @@ public class MainActivity extends Activity {
 
     private Typeface selectedTypeface = Typeface.SANS_SERIF;
     private int selectedColor = 0xFFFFEB3B; // default yellow
+
+    // FIX: every time a new video is picked, currentRequestId advances.
+    // Every async callback (audio extraction, model load, recognition)
+    // captures the request id that was active when it started, and
+    // re-checks it before touching shared state/UI. A stale callback
+    // from a previously selected video is then simply ignored instead
+    // of overwriting the current video's captions.
+    private final AtomicInteger requestIdGenerator = new AtomicInteger(0);
+    private volatile int currentRequestId = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,11 +96,7 @@ public class MainActivity extends Activity {
             }
 
             @Override
-            public void surfaceChanged(
-                    SurfaceHolder holder,
-                    int format,
-                    int width,
-                    int height) {
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
             }
 
             @Override
@@ -105,12 +112,10 @@ public class MainActivity extends Activity {
         selectVideoButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-
                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 intent.setType("video/*");
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
                 startActivityForResult(intent, PICK_VIDEO);
             }
         });
@@ -119,10 +124,14 @@ public class MainActivity extends Activity {
             @Override
             public void onClick(View v) {
                 if (videoUri != null) {
+                    // FIX: capture the request id for THIS generation run
+                    // so async callbacks can tell whether they're still
+                    // relevant by the time they complete.
+                    final int requestId = currentRequestId;
                     generateCaptionsButton.setEnabled(false);
                     captions = null;
                     captionText.setText("");
-                    extractAudio(videoUri);
+                    extractAudio(videoUri, requestId);
                 }
             }
         });
@@ -136,70 +145,50 @@ public class MainActivity extends Activity {
     }
 
     private void setupFontSpinner() {
-        CaptionStyleOptions.FontOption[] fonts =
-                CaptionStyleOptions.getFontOptions();
+        CaptionStyleOptions.FontOption[] fonts = CaptionStyleOptions.getFontOptions();
 
         ArrayAdapter<CaptionStyleOptions.FontOption> adapter =
-                new ArrayAdapter<>(
-                        this,
-                        android.R.layout.simple_spinner_item,
-                        fonts);
-        adapter.setDropDownViewResource(
-                android.R.layout.simple_spinner_dropdown_item);
+                new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, fonts);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         fontStyleSpinner.setAdapter(adapter);
 
-        fontStyleSpinner.setOnItemSelectedListener(
-                new AdapterView.OnItemSelectedListener() {
-                    @Override
-                    public void onItemSelected(
-                            AdapterView<?> parent, View view,
-                            int position, long id) {
+        fontStyleSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                CaptionStyleOptions.FontOption chosen = fonts[position];
+                selectedTypeface = CaptionStyleOptions.resolveTypeface(MainActivity.this, chosen);
+                captionText.setTypeface(selectedTypeface);
+            }
 
-                        CaptionStyleOptions.FontOption chosen = fonts[position];
-                        selectedTypeface = CaptionStyleOptions.resolveTypeface(
-                                MainActivity.this, chosen);
-                        captionText.setTypeface(selectedTypeface);
-                    }
-
-                    @Override
-                    public void onNothingSelected(AdapterView<?> parent) {
-                    }
-                });
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
     }
 
     private void setupColorSpinner() {
-        CaptionStyleOptions.ColorOption[] colors =
-                CaptionStyleOptions.getColorOptions();
+        CaptionStyleOptions.ColorOption[] colors = CaptionStyleOptions.getColorOptions();
 
         ArrayAdapter<CaptionStyleOptions.ColorOption> adapter =
-                new ArrayAdapter<>(
-                        this,
-                        android.R.layout.simple_spinner_item,
-                        colors);
-        adapter.setDropDownViewResource(
-                android.R.layout.simple_spinner_dropdown_item);
+                new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, colors);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         captionColorSpinner.setAdapter(adapter);
 
-        captionColorSpinner.setOnItemSelectedListener(
-                new AdapterView.OnItemSelectedListener() {
-                    @Override
-                    public void onItemSelected(
-                            AdapterView<?> parent, View view,
-                            int position, long id) {
+        captionColorSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                CaptionStyleOptions.ColorOption chosen = colors[position];
+                if (chosen.color == 0) {
+                    showCustomColorDialog();
+                } else {
+                    selectedColor = chosen.color;
+                }
+            }
 
-                        CaptionStyleOptions.ColorOption chosen = colors[position];
-
-                        if (chosen.color == 0) {
-                            showCustomColorDialog();
-                        } else {
-                            selectedColor = chosen.color;
-                        }
-                    }
-
-                    @Override
-                    public void onNothingSelected(AdapterView<?> parent) {
-                    }
-                });
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
     }
 
     private void showCustomColorDialog() {
@@ -217,28 +206,38 @@ public class MainActivity extends Activity {
                     try {
                         selectedColor = Color.parseColor(hex);
                     } catch (Exception e) {
-                        statusText.setText(
-                                "Invalid color code, keeping previous color");
+                        statusText.setText("Invalid color code, keeping previous color");
                     }
                 })
-                .setNegativeButton("Cancel", (dialog, which) ->
-                        dialog.dismiss())
+                .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
                 .show();
     }
 
     @Override
-    protected void onActivityResult(
-            int requestCode,
-            int resultCode,
-            Intent data) {
-
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (requestCode == PICK_VIDEO &&
-                resultCode == RESULT_OK &&
-                data != null) {
+        if (requestCode == PICK_VIDEO && resultCode == RESULT_OK && data != null) {
 
             videoUri = data.getData();
+
+            // FIX: persist read permission on this URI so it survives
+            // process death / activity recreation, not just this session.
+            if (videoUri != null) {
+                try {
+                    getContentResolver().takePersistableUriPermission(
+                            videoUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (SecurityException ignored) {
+                    // Some providers don't support persistable permissions —
+                    // playback/extraction for this session still works fine.
+                }
+            }
+
+            // FIX: bump the request id so any in-flight callback tied to
+            // the PREVIOUSLY selected video is recognized as stale below
+            // and ignored, instead of overwriting the new video's state.
+            currentRequestId = requestIdGenerator.incrementAndGet();
+
             captions = null;
             captionText.setText("");
             exportButton.setEnabled(false);
@@ -250,7 +249,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void extractAudio(Uri uri) {
+    private void extractAudio(Uri uri, int requestId) {
 
         statusText.setText("Extracting audio...");
 
@@ -264,8 +263,14 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
+                                if (requestId != currentRequestId) {
+                                    // A newer video was picked while this was
+                                    // running — discard the orphaned file.
+                                    wavFile.delete();
+                                    return;
+                                }
                                 extractedWavFile = wavFile;
-                                setupModelAndRecognize(wavFile);
+                                setupModelAndRecognize(wavFile, requestId);
                             }
                         });
                     }
@@ -275,6 +280,9 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
+                                if (requestId != currentRequestId) {
+                                    return;
+                                }
                                 statusText.setText(message);
                                 generateCaptionsButton.setEnabled(true);
                             }
@@ -283,7 +291,7 @@ public class MainActivity extends Activity {
                 });
     }
 
-    private void setupModelAndRecognize(File wavFile) {
+    private void setupModelAndRecognize(File wavFile, int requestId) {
 
         ModelManager.downloadAndSetupModel(
                 this,
@@ -294,6 +302,9 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
+                                if (requestId != currentRequestId) {
+                                    return;
+                                }
                                 statusText.setText(message);
                             }
                         });
@@ -304,7 +315,10 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                runSpeechRecognition(modelDir, wavFile);
+                                if (requestId != currentRequestId) {
+                                    return;
+                                }
+                                runSpeechRecognition(modelDir, wavFile, requestId);
                             }
                         });
                     }
@@ -314,6 +328,9 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
+                                if (requestId != currentRequestId) {
+                                    return;
+                                }
                                 statusText.setText(message);
                                 generateCaptionsButton.setEnabled(true);
                             }
@@ -322,7 +339,7 @@ public class MainActivity extends Activity {
                 });
     }
 
-    private void runSpeechRecognition(File modelDir, File wavFile) {
+    private void runSpeechRecognition(File modelDir, File wavFile, int requestId) {
 
         SpeechToText.recognize(
                 modelDir,
@@ -334,20 +351,28 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
+                                if (requestId != currentRequestId) {
+                                    return;
+                                }
                                 statusText.setText(message);
                             }
                         });
                     }
 
                     @Override
-                    public void onSuccess(String jsonResult) {
+                    public void onSuccess(List<String> jsonResults) {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                captions = CaptionParser.parseVoskResult(jsonResult);
+                                if (requestId != currentRequestId) {
+                                    return;
+                                }
+                                // FIX: merge every utterance's JSON instead
+                                // of parsing a single chunk — see
+                                // CaptionParser.parseVoskResults().
+                                captions = CaptionParser.parseVoskResults(jsonResults);
                                 statusText.setText(
-                                        "Captions ready! (" +
-                                        captions.size() + " words)");
+                                        "Captions ready! (" + captions.size() + " words)");
                                 generateCaptionsButton.setEnabled(true);
                                 exportButton.setEnabled(true);
                                 startCaptionUpdates();
@@ -360,6 +385,9 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
+                                if (requestId != currentRequestId) {
+                                    return;
+                                }
                                 statusText.setText(message);
                                 generateCaptionsButton.setEnabled(true);
                             }
@@ -381,8 +409,7 @@ public class MainActivity extends Activity {
                     int matchedIndex = -1;
                     for (int i = 0; i < captions.size(); i++) {
                         Caption cap = captions.get(i);
-                        if (currentTimeSec >= cap.startTime &&
-                                currentTimeSec < cap.endTime) {
+                        if (currentTimeSec >= cap.startTime && currentTimeSec < cap.endTime) {
                             matchedIndex = i;
                             break;
                         }
@@ -404,8 +431,7 @@ public class MainActivity extends Activity {
                     int wordsBefore = 2;
                     int wordsAfter = 2;
                     int startIdx = Math.max(0, anchorIndex - wordsBefore);
-                    int endIdx = Math.min(
-                            captions.size() - 1, anchorIndex + wordsAfter);
+                    int endIdx = Math.min(captions.size() - 1, anchorIndex + wordsAfter);
 
                     android.text.SpannableStringBuilder builder =
                             new android.text.SpannableStringBuilder();
@@ -421,10 +447,7 @@ public class MainActivity extends Activity {
                             int glowColor = (selectedColor & 0x00FFFFFF) | 0xAA000000;
 
                             builder.setSpan(
-                                    new GlowSpan(
-                                            selectedColor,
-                                            glowColor,
-                                            10f),
+                                    new GlowSpan(selectedColor, glowColor, 10f),
                                     start, end, 0);
                             builder.setSpan(
                                     new android.text.style.StyleSpan(
@@ -432,8 +455,7 @@ public class MainActivity extends Activity {
                                     start, end, 0);
                         } else {
                             builder.setSpan(
-                                    new android.text.style.ForegroundColorSpan(
-                                            0xCCCCCCCC),
+                                    new android.text.style.ForegroundColorSpan(0xCCCCCCCC),
                                     start, end, 0);
                         }
 
@@ -457,9 +479,7 @@ public class MainActivity extends Activity {
     }
 
     private void playVideo(Uri uri) {
-
         try {
-
             if (mediaPlayer != null) {
                 mediaPlayer.reset();
             } else {
@@ -467,29 +487,19 @@ public class MainActivity extends Activity {
             }
 
             mediaPlayer.setDataSource(this, uri);
-
             mediaPlayer.setDisplay(surfaceHolder);
 
-            mediaPlayer.setOnPreparedListener(
-                    new MediaPlayer.OnPreparedListener() {
-
+            mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 @Override
                 public void onPrepared(MediaPlayer mp) {
-
                     mp.setLooping(true);
                     mp.start();
                 }
             });
 
-            mediaPlayer.setOnErrorListener(
-                    new MediaPlayer.OnErrorListener() {
-
+            mediaPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
                 @Override
-                public boolean onError(
-                        MediaPlayer mp,
-                        int what,
-                        int extra) {
-
+                public boolean onError(MediaPlayer mp, int what, int extra) {
                     statusText.setText("Playback error");
                     return true;
                 }
@@ -498,15 +508,12 @@ public class MainActivity extends Activity {
             mediaPlayer.prepareAsync();
 
         } catch (Exception e) {
-
-            statusText.setText(
-                    "Error: " + e.getMessage());
+            statusText.setText("Error: " + e.getMessage());
         }
     }
 
     @Override
     protected void onDestroy() {
-
         super.onDestroy();
 
         stopCaptionUpdates();
@@ -514,6 +521,12 @@ public class MainActivity extends Activity {
         if (mediaPlayer != null) {
             mediaPlayer.release();
             mediaPlayer = null;
+        }
+
+        // FIX: clean up the last extracted-audio temp file so cache
+        // doesn't slowly accumulate leftover files across sessions.
+        if (extractedWavFile != null) {
+            extractedWavFile.delete();
         }
 
         SpeechToText.releaseModel();
