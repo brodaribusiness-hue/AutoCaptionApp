@@ -1,17 +1,25 @@
 package com.saad.autocaption;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.content.Intent;
 import android.net.Uri;
+import android.text.InputType;
 import android.view.View;
 import android.view.SurfaceView;
 import android.view.SurfaceHolder;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.AdapterView;
 import android.media.MediaPlayer;
 import java.io.File;
 import java.util.List;
@@ -27,11 +35,16 @@ public class MainActivity extends Activity {
     private TextView captionText;
     private Button generateCaptionsButton;
     private Button exportButton;
+    private Spinner fontStyleSpinner;
+    private Spinner captionColorSpinner;
     private Uri videoUri;
     private File extractedWavFile;
     private List<Caption> captions;
     private Handler captionUpdateHandler;
     private Runnable captionUpdateRunnable;
+
+    private Typeface selectedTypeface = Typeface.SANS_SERIF;
+    private int selectedColor = 0xFFFFEB3B; // default yellow
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,12 +57,17 @@ public class MainActivity extends Activity {
         generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
         exportButton = (Button) findViewById(R.id.exportButton);
         statusText = (TextView) findViewById(R.id.statusText);
+        fontStyleSpinner = (Spinner) findViewById(R.id.fontStyleSpinner);
+        captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
 
         captionText.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        captionText.setTypeface(selectedTypeface);
 
-        // Disabled until a video is selected / captions exist.
         generateCaptionsButton.setEnabled(false);
         exportButton.setEnabled(false);
+
+        setupFontSpinner();
+        setupColorSpinner();
 
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
@@ -112,11 +130,100 @@ public class MainActivity extends Activity {
         exportButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                // Full burn-into-MP4 export isn't implemented yet — this
-                // is a placeholder until that feature is built.
                 statusText.setText("Export coming soon");
             }
         });
+    }
+
+    private void setupFontSpinner() {
+        CaptionStyleOptions.FontOption[] fonts =
+                CaptionStyleOptions.getFontOptions();
+
+        ArrayAdapter<CaptionStyleOptions.FontOption> adapter =
+                new ArrayAdapter<>(
+                        this,
+                        android.R.layout.simple_spinner_item,
+                        fonts);
+        adapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item);
+        fontStyleSpinner.setAdapter(adapter);
+
+        fontStyleSpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(
+                            AdapterView<?> parent, View view,
+                            int position, long id) {
+
+                        CaptionStyleOptions.FontOption chosen = fonts[position];
+                        selectedTypeface = CaptionStyleOptions.resolveTypeface(
+                                MainActivity.this, chosen);
+                        captionText.setTypeface(selectedTypeface);
+                    }
+
+                    @Override
+                    public void onNothingSelected(AdapterView<?> parent) {
+                    }
+                });
+    }
+
+    private void setupColorSpinner() {
+        CaptionStyleOptions.ColorOption[] colors =
+                CaptionStyleOptions.getColorOptions();
+
+        ArrayAdapter<CaptionStyleOptions.ColorOption> adapter =
+                new ArrayAdapter<>(
+                        this,
+                        android.R.layout.simple_spinner_item,
+                        colors);
+        adapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item);
+        captionColorSpinner.setAdapter(adapter);
+
+        captionColorSpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(
+                            AdapterView<?> parent, View view,
+                            int position, long id) {
+
+                        CaptionStyleOptions.ColorOption chosen = colors[position];
+
+                        if (chosen.color == 0) {
+                            showCustomColorDialog();
+                        } else {
+                            selectedColor = chosen.color;
+                        }
+                    }
+
+                    @Override
+                    public void onNothingSelected(AdapterView<?> parent) {
+                    }
+                });
+    }
+
+    private void showCustomColorDialog() {
+        EditText input = new EditText(this);
+        input.setHint("#RRGGBB e.g. #FF00FF");
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setTextColor(0xFFFFFFFF);
+        input.setHintTextColor(0xFF888888);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Custom Caption Color")
+                .setView(input)
+                .setPositiveButton("Apply", (dialog, which) -> {
+                    String hex = input.getText().toString().trim();
+                    try {
+                        selectedColor = Color.parseColor(hex);
+                    } catch (Exception e) {
+                        statusText.setText(
+                                "Invalid color code, keeping previous color");
+                    }
+                })
+                .setNegativeButton("Cancel", (dialog, which) ->
+                        dialog.dismiss())
+                .show();
     }
 
     @Override
@@ -311,10 +418,12 @@ public class MainActivity extends Activity {
                         int end = builder.length();
 
                         if (i == matchedIndex) {
+                            int glowColor = (selectedColor & 0x00FFFFFF) | 0xAA000000;
+
                             builder.setSpan(
                                     new GlowSpan(
-                                            0xFFFFFFFF,
-                                            0xAAFFEB3B,
+                                            selectedColor,
+                                            glowColor,
                                             10f),
                                     start, end, 0);
                             builder.setSpan(
