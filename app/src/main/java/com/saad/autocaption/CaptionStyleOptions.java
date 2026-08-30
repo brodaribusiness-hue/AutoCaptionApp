@@ -8,7 +8,7 @@ public class CaptionStyleOptions {
 
     public static class FontOption {
         public final String label;
-        public final String assetFileName; // null = use builtInTypeface
+        public final String assetFileName;
         public final Typeface builtInTypeface;
 
         FontOption(String label, String assetFileName, Typeface builtInTypeface) {
@@ -25,7 +25,7 @@ public class CaptionStyleOptions {
 
     public static class ColorOption {
         public final String label;
-        public final int color; // 0 means "Custom" (color picked by user)
+        public final int color;
 
         ColorOption(String label, int color) {
             this.label = label;
@@ -38,7 +38,6 @@ public class CaptionStyleOptions {
         }
     }
 
-    // NEW: 5 font sizes
     public static class FontSizeOption {
         public final String label;
         public final float sizeSp;
@@ -54,7 +53,6 @@ public class CaptionStyleOptions {
         }
     }
 
-    // NEW: Top / Middle / Bottom position
     public static class PositionOption {
         public final String label;
         public final int gravity;
@@ -70,9 +68,16 @@ public class CaptionStyleOptions {
         }
     }
 
-    // NEW: 5 caption styles (Glow + 4 new)
+    // UPDATED: 8 caption styles per the requested list
     public enum CaptionStyleType {
-        GLOW, OUTLINE, BACKGROUND_BOX, KARAOKE_FILL, POP_SCALE
+        HIGHLIGHT_POP,
+        GREEN_EMPHASIS,
+        KARAOKE_FLOW,
+        ONE_WORD_PUNCH,
+        BOX_HIGHLIGHT,
+        BOUNCE,
+        GLOW_POP,
+        MINIMAL_CLEAN
     }
 
     public static class StyleOption {
@@ -118,7 +123,6 @@ public class CaptionStyleOptions {
         };
     }
 
-    // NEW
     public static FontSizeOption[] getFontSizeOptions() {
         return new FontSizeOption[]{
                 new FontSizeOption("Small", 18f),
@@ -129,7 +133,6 @@ public class CaptionStyleOptions {
         };
     }
 
-    // NEW
     public static PositionOption[] getPositionOptions() {
         return new PositionOption[]{
                 new PositionOption("Top", Gravity.TOP),
@@ -138,26 +141,26 @@ public class CaptionStyleOptions {
         };
     }
 
-    // NEW
+    // UPDATED
     public static StyleOption[] getStyleOptions() {
         return new StyleOption[]{
-                new StyleOption("Glow", CaptionStyleType.GLOW),
-                new StyleOption("Outline", CaptionStyleType.OUTLINE),
-                new StyleOption("Background Box", CaptionStyleType.BACKGROUND_BOX),
-                new StyleOption("Karaoke Fill", CaptionStyleType.KARAOKE_FILL),
-                new StyleOption("Pop / Scale", CaptionStyleType.POP_SCALE),
+                new StyleOption("Highlight Pop", CaptionStyleType.HIGHLIGHT_POP),
+                new StyleOption("Green Emphasis", CaptionStyleType.GREEN_EMPHASIS),
+                new StyleOption("Karaoke Flow", CaptionStyleType.KARAOKE_FLOW),
+                new StyleOption("One Word Punch", CaptionStyleType.ONE_WORD_PUNCH),
+                new StyleOption("Box Highlight", CaptionStyleType.BOX_HIGHLIGHT),
+                new StyleOption("Bounce Caption", CaptionStyleType.BOUNCE),
+                new StyleOption("Glow Pop", CaptionStyleType.GLOW_POP),
+                new StyleOption("Minimal Clean", CaptionStyleType.MINIMAL_CLEAN),
         };
     }
 
-    /** Loads a custom font from assets, falling back to a built-in
-     * typeface if the file isn't present yet. Never throws. */
     public static Typeface resolveTypeface(Context context, FontOption option) {
         if (option.assetFileName != null) {
             try {
                 return Typeface.createFromAsset(
                         context.getAssets(), option.assetFileName);
             } catch (Exception e) {
-                // Font file not added yet — fall back silently.
                 return option.builtInTypeface;
             }
         }
