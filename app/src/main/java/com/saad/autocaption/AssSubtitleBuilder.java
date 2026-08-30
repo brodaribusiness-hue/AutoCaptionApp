@@ -24,8 +24,6 @@ public class AssSubtitleBuilder {
         sb.append("[Script Info]\nScriptType: v4.00+\nPlayResX: ")
                 .append(videoWidth).append("\nPlayResY: ").append(videoHeight).append("\n\n");
 
-        // Preview text size is tuned against a ~400dp-wide screen; scale
-        // proportionally to the real export resolution.
         float scaleFactor = videoWidth / 400f;
         int assFontSize = Math.round(fontSizeSp * scaleFactor);
 
@@ -36,9 +34,11 @@ public class AssSubtitleBuilder {
         String highlightAss = toAssColor(highlightColor);
         String outlineColor = toAssColor(0xFF000000);
 
-        int borderStyle = (style == CaptionStyleOptions.CaptionStyleType.BACKGROUND_BOX
-                || style == CaptionStyleOptions.CaptionStyleType.KARAOKE_FILL) ? 3 : 1;
-        int outlineWidth = (style == CaptionStyleOptions.CaptionStyleType.OUTLINE) ? 4 : 2;
+        // UPDATED: mapped to the new 8 style names.
+        int borderStyle = (style == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT
+                || style == CaptionStyleOptions.CaptionStyleType.KARAOKE_FLOW) ? 3 : 1;
+        int outlineWidth = (style == CaptionStyleOptions.CaptionStyleType.BOUNCE
+                || style == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH) ? 4 : 2;
 
         sb.append("[V4+ Styles]\n");
         sb.append("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
@@ -62,15 +62,22 @@ public class AssSubtitleBuilder {
             int endIdx = Math.min(captions.size() - 1, matched + wordsAfter);
 
             StringBuilder line = new StringBuilder();
-            for (int i = startIdx; i <= endIdx; i++) {
-                Caption cap = captions.get(i);
-                if (i == matched) {
-                    line.append(buildActiveWordTag(style, highlightAss))
-                            .append(cap.word).append("{\\r}");
-                } else {
-                    line.append(cap.word);
+
+            // NEW: One Word Punch only shows the active word in export too.
+            if (style == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH) {
+                line.append(buildActiveWordTag(style, highlightAss))
+                        .append(activeCap.word).append("{\\r}");
+            } else {
+                for (int i = startIdx; i <= endIdx; i++) {
+                    Caption cap = captions.get(i);
+                    if (i == matched) {
+                        line.append(buildActiveWordTag(style, highlightAss))
+                                .append(cap.word).append("{\\r}");
+                    } else {
+                        line.append(cap.word);
+                    }
+                    if (i != endIdx) line.append(" ");
                 }
-                if (i != endIdx) line.append(" ");
             }
 
             sb.append("Dialogue: 0,")
@@ -82,19 +89,26 @@ public class AssSubtitleBuilder {
         return sb.toString();
     }
 
+    // UPDATED: mapped to the new 8 style names.
     private static String buildActiveWordTag(
             CaptionStyleOptions.CaptionStyleType style, String highlightAss) {
         switch (style) {
-            case POP_SCALE:
-                return "{\\fscx135\\fscy135\\c" + highlightAss + "}";
-            case KARAOKE_FILL:
-            case BACKGROUND_BOX:
+            case ONE_WORD_PUNCH:
+                return "{\\fscx180\\fscy180\\c" + highlightAss + "}";
+            case KARAOKE_FLOW:
+            case BOX_HIGHLIGHT:
                 return "{\\c" + highlightAss + "}";
-            case OUTLINE:
-                return "{\\c" + highlightAss + "\\bord4}";
-            case GLOW:
+            case BOUNCE:
+                return "{\\fscx125\\fscy125\\c" + highlightAss + "}";
+            case GLOW_POP:
+                return "{\\fscx125\\fscy125\\c" + highlightAss + "\\blur4}";
+            case GREEN_EMPHASIS:
+                return "{\\c&H0000FF00&}"; // solid green
+            case MINIMAL_CLEAN:
+                return "{\\c&HFFFFFF&}"; // solid white, no emphasis
+            case HIGHLIGHT_POP:
             default:
-                return "{\\c" + highlightAss + "\\blur4}";
+                return "{\\c" + highlightAss + "}";
         }
     }
 
@@ -104,7 +118,6 @@ public class AssSubtitleBuilder {
         return 2; // bottom
     }
 
-    // ASS uses &HAABBGGRR — alpha inverted (00 = fully opaque).
     private static String toAssColor(int argb) {
         int a = 255 - ((argb >> 24) & 0xFF);
         int r = (argb >> 16) & 0xFF;
