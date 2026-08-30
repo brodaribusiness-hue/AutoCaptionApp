@@ -6,15 +6,18 @@ import android.graphics.MaskFilter;
 import android.graphics.Paint;
 import android.text.style.ReplacementSpan;
 
-/** Glow + enlarged scale combined on the active word. */
+/** Soft glow halo behind sharp, readable text — draws a blurred glow
+ * layer first, then the crisp text on top so letters stay legible. */
 public class GlowPopSpan extends ReplacementSpan {
 
     private final int color;
+    private final int glowColor;
     private final float scale;
     private final float blurRadius;
 
-    public GlowPopSpan(int color, float scale, float blurRadius) {
+    public GlowPopSpan(int color, int glowColor, float scale, float blurRadius) {
         this.color = color;
+        this.glowColor = glowColor;
         this.scale = scale;
         this.blurRadius = blurRadius;
     }
@@ -44,8 +47,15 @@ public class GlowPopSpan extends ReplacementSpan {
         MaskFilter originalMask = paint.getMaskFilter();
 
         paint.setTextSize(originalSize * scale);
-        paint.setColor(color);
+
+        // Soft blurred halo behind the text.
+        paint.setColor(glowColor);
         paint.setMaskFilter(new BlurMaskFilter(blurRadius, BlurMaskFilter.Blur.NORMAL));
+        canvas.drawText(text, start, end, x, y, paint);
+
+        // Sharp solid text drawn on top — keeps letters readable.
+        paint.setMaskFilter(null);
+        paint.setColor(color);
         canvas.drawText(text, start, end, x, y, paint);
 
         paint.setMaskFilter(originalMask);
