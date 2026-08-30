@@ -77,11 +77,11 @@ public class VideoExporter {
                 // and don't apply to mediacodec, so they're dropped in
                 // favor of a target bitrate.
                 String command = String.format(
-                        "-y -i \"%s\" -vf \"subtitles='%s'\" -c:v h264_mediacodec -b:v 4M "
-                                + "-c:a copy \"%s\"",
-                        tempInputVideo.getAbsolutePath(),
-                        assFile.getAbsolutePath().replace("'", "'\\''"),
-                        outputVideo.getAbsolutePath());
+        "-y -i \"%s\" -vf \"subtitles='%s':fontsdir='/system/fonts'\" -c:v h264_mediacodec -b:v 4M "
+                + "-c:a copy \"%s\"",
+        tempInputVideo.getAbsolutePath(),
+        assFile.getAbsolutePath().replace("'", "'\\''"),
+        outputVideo.getAbsolutePath());
 
                 FFmpegSession session = FFmpegKit.execute(command);
 
