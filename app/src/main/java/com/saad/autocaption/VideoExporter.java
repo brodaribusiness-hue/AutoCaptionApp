@@ -80,8 +80,18 @@ public class VideoExporter {
 
                 FFmpegSession session = FFmpegKit.execute(command);
 
+                // FIX: getFailStackTrace() often returns null when ffmpeg
+                // itself reports the error (bad filter, bad path, etc.)
+                // rather than the FFmpegKit wrapper crashing. The actual
+                // reason is in the process's own log output instead.
                 if (!ReturnCode.isSuccess(session.getReturnCode())) {
-                    throw new Exception("ffmpeg failed: " + session.getFailStackTrace());
+                    String logs = session.getAllLogsAsString();
+                    throw new Exception(
+                            "ffmpeg rc=" + session.getReturnCode() + " logs: " + logs);
+                }
+
+                if (!outputVideo.exists() || outputVideo.length() == 0) {
+                    throw new Exception("ffmpeg reported success but output file is missing/empty");
                 }
 
                 mainHandler.post(() -> callback.onProgress("Saving to gallery..."));
