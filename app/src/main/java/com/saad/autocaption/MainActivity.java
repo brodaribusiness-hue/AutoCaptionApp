@@ -608,6 +608,18 @@ videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
                 public void onPrepared(MediaPlayer mp) {
                     mp.setLooping(true);
                     mp.start();
+               mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+    @Override
+    public void onPrepared(MediaPlayer mp) {
+        int vw = mp.getVideoWidth();
+        int vh = mp.getVideoHeight();
+        if (vw > 0 && vh > 0) {
+            videoPreviewContainer.setAspectRatio(vw, vh);
+        }
+        mp.setLooping(true);
+        mp.start();
+    }
+});
                 }
             });
 
