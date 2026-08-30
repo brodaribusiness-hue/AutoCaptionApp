@@ -4,17 +4,27 @@ import android.content.Context;
 import android.graphics.Typeface;
 import android.view.Gravity;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+
 public class CaptionStyleOptions {
 
     public static class FontOption {
         public final String label;
-        public final String assetFileName;
+        public final String assetFileName; // null = built-in system font
         public final Typeface builtInTypeface;
+        public final String exportFamilyName; // family name written into the .ass file
+        public final String systemFontFile;   // filename under /system/fonts (null for custom fonts)
 
-        FontOption(String label, String assetFileName, Typeface builtInTypeface) {
+        FontOption(String label, String assetFileName, Typeface builtInTypeface,
+                   String exportFamilyName, String systemFontFile) {
             this.label = label;
             this.assetFileName = assetFileName;
             this.builtInTypeface = builtInTypeface;
+            this.exportFamilyName = exportFamilyName;
+            this.systemFontFile = systemFontFile;
         }
 
         @Override
@@ -68,7 +78,6 @@ public class CaptionStyleOptions {
         }
     }
 
-    // UPDATED: 8 caption styles per the requested list
     public enum CaptionStyleType {
         HIGHLIGHT_POP,
         GREEN_EMPHASIS,
@@ -97,16 +106,22 @@ public class CaptionStyleOptions {
 
     public static FontOption[] getFontOptions() {
         return new FontOption[]{
-                new FontOption("Modern", null, Typeface.SANS_SERIF),
-                new FontOption("Vintage", null, Typeface.SERIF),
+                new FontOption("Modern", null, Typeface.SANS_SERIF,
+                        "Roboto", "Roboto-Regular.ttf"),
+                new FontOption("Vintage", null, Typeface.SERIF,
+                        "Noto Serif", "NotoSerif-Regular.ttf"),
                 new FontOption("Swanky", null,
-                        Typeface.create("cursive", Typeface.NORMAL)),
+                        Typeface.create("cursive", Typeface.NORMAL),
+                        "Roboto", "Roboto-Regular.ttf"),
                 new FontOption("Aesthetic", null,
-                        Typeface.create("sans-serif-light", Typeface.NORMAL)),
+                        Typeface.create("sans-serif-light", Typeface.NORMAL),
+                        "Roboto Light", "Roboto-Light.ttf"),
                 new FontOption("Blissful Script",
-                        "fonts/blissful_script.ttf", Typeface.SERIF),
+                        "fonts/blissful_script.ttf", Typeface.SERIF,
+                        "Blissful Script", null),
                 new FontOption("Blafhy Glibs",
-                        "fonts/blafhy_glibs.ttf", Typeface.SANS_SERIF),
+                        "fonts/blafhy_glibs.ttf", Typeface.SANS_SERIF,
+                        "Blafhy Glibs", null),
         };
     }
 
@@ -141,7 +156,6 @@ public class CaptionStyleOptions {
         };
     }
 
-    // UPDATED
     public static StyleOption[] getStyleOptions() {
         return new StyleOption[]{
                 new StyleOption("Highlight Pop", CaptionStyleType.HIGHLIGHT_POP),
@@ -165,5 +179,57 @@ public class CaptionStyleOptions {
             }
         }
         return option.builtInTypeface;
+    }
+
+    /** Copies whichever font file the export needs (asset or system font)
+     * into targetDir so ffmpeg's subtitle renderer can find it, and
+     * returns the font family name to use in the .ass file. Falls back
+     * to Roboto if the requested font can't be found. */
+    public static String prepareExportFont(Context context, FontOption option, File targetDir)
+            throws Exception {
+        if (!targetDir.exists()) {
+            targetDir.mkdirs();
+        }
+
+        if (option.assetFileName != null) {
+            String baseName = option.assetFileName.substring(
+                    option.assetFileName.lastIndexOf('/') + 1);
+            File dest = new File(targetDir, baseName);
+            try (InputStream in = context.getAssets().open(option.assetFileName);
+                 OutputStream out = new FileOutputStream(dest)) {
+                copyStream(in, out);
+                return option.exportFamilyName;
+            } catch (Exception e) {
+                // Asset not added yet — fall through to Roboto fallback below.
+            }
+        } else if (option.systemFontFile != null) {
+            File systemFile = new File("/system/fonts/" + option.systemFontFile);
+            if (systemFile.exists()) {
+                File dest = new File(targetDir, option.systemFontFile);
+                try (InputStream in = new java.io.FileInputStream(systemFile);
+                     OutputStream out = new FileOutputStream(dest)) {
+                    copyStream(in, out);
+                    return option.exportFamilyName;
+                }
+            }
+        }
+
+        File robotoSrc = new File("/system/fonts/Roboto-Regular.ttf");
+        if (robotoSrc.exists()) {
+            File dest = new File(targetDir, "Roboto-Regular.ttf");
+            try (InputStream in = new java.io.FileInputStream(robotoSrc);
+                 OutputStream out = new FileOutputStream(dest)) {
+                copyStream(in, out);
+            }
+        }
+        return "Roboto";
+    }
+
+    private static void copyStream(InputStream in, OutputStream out) throws Exception {
+        byte[] buffer = new byte[8192];
+        int len;
+        while ((len = in.read(buffer)) != -1) {
+            out.write(buffer, 0, len);
+        }
     }
 }
