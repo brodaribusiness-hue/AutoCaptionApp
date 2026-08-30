@@ -57,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
     private Runnable captionUpdateRunnable;
 
     private Typeface selectedTypeface = Typeface.SANS_SERIF;
+    private CaptionStyleOptions.FontOption selectedFontOption;
     private int selectedColor = 0xFFFFEB3B;
     private float selectedFontSizeSp = 22f;
     private int selectedGravity = Gravity.BOTTOM;
@@ -187,7 +188,7 @@ public class MainActivity extends AppCompatActivity {
                         MainActivity.this,
                         videoUri,
                         captions,
-                        "Roboto",
+                        selectedFontOption,
                         selectedFontSizeSp,
                         selectedColor,
                         selectedGravity,
@@ -234,6 +235,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupFontSpinner() {
         CaptionStyleOptions.FontOption[] fonts = CaptionStyleOptions.getFontOptions();
+        selectedFontOption = fonts[0];
 
         ArrayAdapter<CaptionStyleOptions.FontOption> adapter =
                 new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, fonts);
@@ -244,6 +246,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 CaptionStyleOptions.FontOption chosen = fonts[position];
+                selectedFontOption = chosen;
                 selectedTypeface = CaptionStyleOptions.resolveTypeface(MainActivity.this, chosen);
                 captionText.setTypeface(selectedTypeface);
             }
@@ -555,15 +558,13 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    // UPDATED: returns the active-word span for each of the 8 styles.
-    // MINIMAL_CLEAN returns null — no special highlight, handled below.
     private Object buildActiveWordSpan() {
         switch (selectedStyle) {
             case HIGHLIGHT_POP:
-                return new android.text.style.ForegroundColorSpan(0xFFFF9800); // orange
+                return new android.text.style.ForegroundColorSpan(0xFFFF9800);
 
             case GREEN_EMPHASIS:
-                return new android.text.style.ForegroundColorSpan(0xFF4CAF50); // green
+                return new android.text.style.ForegroundColorSpan(0xFF4CAF50);
 
             case KARAOKE_FLOW:
                 return new KaraokeFillSpan(0xFFFFFFFF, selectedColor, 8f);
@@ -578,7 +579,8 @@ public class MainActivity extends AppCompatActivity {
                 return new BounceSpan(selectedColor);
 
             case GLOW_POP:
-                return new GlowPopSpan(selectedColor, 1.25f, 10f);
+                int glowColor = (selectedColor & 0x00FFFFFF) | 0x80000000;
+                return new GlowPopSpan(selectedColor, glowColor, 1.15f, 5f);
 
             case MINIMAL_CLEAN:
             default:
@@ -586,8 +588,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // UPDATED: rest-of-line (non-active) word color depends on style —
-    // white for the "white text" styles, soft grey for the rest.
     private int restWordColor() {
         switch (selectedStyle) {
             case HIGHLIGHT_POP:
@@ -634,8 +634,6 @@ public class MainActivity extends AppCompatActivity {
                     android.text.SpannableStringBuilder builder =
                             new android.text.SpannableStringBuilder();
 
-                    // NEW: One Word Punch shows ONLY the active word,
-                    // not the usual 4-5 word rolling window.
                     if (selectedStyle == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH) {
                         if (matchedIndex != -1) {
                             Caption cap = captions.get(matchedIndex);
@@ -664,7 +662,6 @@ public class MainActivity extends AppCompatActivity {
                         int end = builder.length();
 
                         if (selectedStyle == CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN) {
-                            // Clean uniform style — no active-word distinction.
                             builder.setSpan(
                                     new android.text.style.ForegroundColorSpan(0xFFFFFFFF),
                                     start, end, 0);
