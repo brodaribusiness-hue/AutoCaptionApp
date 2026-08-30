@@ -2,6 +2,7 @@ package com.saad.autocaption;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.view.Gravity;
 
 public class CaptionStyleOptions {
 
@@ -37,6 +38,58 @@ public class CaptionStyleOptions {
         }
     }
 
+    // NEW: 5 font sizes
+    public static class FontSizeOption {
+        public final String label;
+        public final float sizeSp;
+
+        FontSizeOption(String label, float sizeSp) {
+            this.label = label;
+            this.sizeSp = sizeSp;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    // NEW: Top / Middle / Bottom position
+    public static class PositionOption {
+        public final String label;
+        public final int gravity;
+
+        PositionOption(String label, int gravity) {
+            this.label = label;
+            this.gravity = gravity;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    // NEW: 5 caption styles (Glow + 4 new)
+    public enum CaptionStyleType {
+        GLOW, OUTLINE, BACKGROUND_BOX, KARAOKE_FILL, POP_SCALE
+    }
+
+    public static class StyleOption {
+        public final String label;
+        public final CaptionStyleType type;
+
+        StyleOption(String label, CaptionStyleType type) {
+            this.label = label;
+            this.type = type;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
     public static FontOption[] getFontOptions() {
         return new FontOption[]{
                 new FontOption("Modern", null, Typeface.SANS_SERIF),
@@ -62,6 +115,37 @@ public class CaptionStyleOptions {
                 new ColorOption("Pink", 0xFFFF4081),
                 new ColorOption("Orange", 0xFFFF9800),
                 new ColorOption("Custom...", 0),
+        };
+    }
+
+    // NEW
+    public static FontSizeOption[] getFontSizeOptions() {
+        return new FontSizeOption[]{
+                new FontSizeOption("Small", 18f),
+                new FontSizeOption("Medium", 22f),
+                new FontSizeOption("Large", 26f),
+                new FontSizeOption("X-Large", 30f),
+                new FontSizeOption("Huge", 36f),
+        };
+    }
+
+    // NEW
+    public static PositionOption[] getPositionOptions() {
+        return new PositionOption[]{
+                new PositionOption("Top", Gravity.TOP),
+                new PositionOption("Middle", Gravity.CENTER_VERTICAL),
+                new PositionOption("Bottom", Gravity.BOTTOM),
+        };
+    }
+
+    // NEW
+    public static StyleOption[] getStyleOptions() {
+        return new StyleOption[]{
+                new StyleOption("Glow", CaptionStyleType.GLOW),
+                new StyleOption("Outline", CaptionStyleType.OUTLINE),
+                new StyleOption("Background Box", CaptionStyleType.BACKGROUND_BOX),
+                new StyleOption("Karaoke Fill", CaptionStyleType.KARAOKE_FILL),
+                new StyleOption("Pop / Scale", CaptionStyleType.POP_SCALE),
         };
     }
 
