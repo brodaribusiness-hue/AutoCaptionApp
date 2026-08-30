@@ -162,7 +162,7 @@ public class MainActivity extends Activity {
                         MainActivity.this,
                         videoUri,
                         captions,
-                        "sans-serif", // TODO: map selectedTypeface -> real font family / fontsdir
+                        "Roboto", // matches /system/fonts/Roboto-Regular.ttf so libass can find it
                         selectedFontSizeSp,
                         selectedColor,
                         selectedGravity,
