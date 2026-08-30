@@ -1,5 +1,7 @@
 package com.saad.autocaption;
 
+import android.util.Log;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -8,8 +10,30 @@ import java.util.List;
 
 public class CaptionParser {
 
+    private static final String TAG = "CaptionParser";
+
+    // FIX: Vosk emits one JSON object per detected utterance/pause, not a
+    // single JSON for the whole file. This merges all of them, in order,
+    // into one caption list. Word timestamps are already continuous
+    // across calls on the same Recognizer instance, so no offset math
+    // is needed here — just concatenation.
+    public static List<Caption> parseVoskResults(List<String> jsonResults) {
+        List<Caption> allCaptions = new ArrayList<>();
+        if (jsonResults == null) {
+            return allCaptions;
+        }
+        for (String jsonResult : jsonResults) {
+            allCaptions.addAll(parseVoskResult(jsonResult));
+        }
+        return allCaptions;
+    }
+
     public static List<Caption> parseVoskResult(String jsonResult) {
         List<Caption> captions = new ArrayList<>();
+
+        if (jsonResult == null || jsonResult.trim().isEmpty()) {
+            return captions;
+        }
 
         try {
             JSONObject json = new JSONObject(jsonResult);
@@ -26,19 +50,17 @@ public class CaptionParser {
                         float endTime = (float) item.optDouble("end", 0.0);
                         float confidence = (float) item.optDouble("conf", 1.0);
 
-                        Caption caption = new Caption(
-                                word,
-                                startTime,
-                                endTime,
-                                confidence);
-
+                        Caption caption = new Caption(word, startTime, endTime, confidence);
                         captions.add(caption);
                     }
                 }
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
+            // FIX: was silently swallowed with only printStackTrace(),
+            // which is invisible in a release build. Now logged with
+            // Log.e so a parse failure is actually visible in Logcat.
+            Log.e(TAG, "Failed to parse Vosk result chunk: " + jsonResult, e);
         }
 
         return captions;
