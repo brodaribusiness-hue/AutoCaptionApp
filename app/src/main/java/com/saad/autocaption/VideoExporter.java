@@ -20,11 +20,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
 
-/**
- * Burns captions into the source video via an ASS subtitle track,
- * keeps the original audio (no re-encode), and saves the result to
- * the device gallery through MediaStore.
- */
 public class VideoExporter {
 
     public interface ExportCallback {
@@ -37,7 +32,7 @@ public class VideoExporter {
             Context context,
             Uri videoUri,
             List<Caption> captions,
-            String fontName,
+            CaptionStyleOptions.FontOption fontOption,
             float fontSizeSp,
             int highlightColor,
             int gravity,
@@ -49,6 +44,7 @@ public class VideoExporter {
         new Thread(() -> {
             File tempInputVideo = new File(context.getCacheDir(), "export_input.mp4");
             File assFile = new File(context.getCacheDir(), "export_captions.ass");
+            File fontsDir = new File(context.getCacheDir(), "export_fonts");
             File outputVideo = new File(context.getCacheDir(),
                     "auto_caption_export_" + System.currentTimeMillis() + ".mp4");
 
@@ -60,10 +56,14 @@ public class VideoExporter {
                 int videoWidth = dims[0];
                 int videoHeight = dims[1];
 
+                mainHandler.post(() -> callback.onProgress("Preparing font..."));
+                String familyName = CaptionStyleOptions.prepareExportFont(
+                        context, fontOption, fontsDir);
+
                 mainHandler.post(() -> callback.onProgress("Building captions..."));
                 String assContent = AssSubtitleBuilder.build(
                         captions, videoWidth, videoHeight,
-                        fontName, fontSizeSp, highlightColor, gravity, style);
+                        familyName, fontSizeSp, highlightColor, gravity, style);
 
                 try (FileOutputStream fos = new FileOutputStream(assFile)) {
                     fos.write(assContent.getBytes("UTF-8"));
@@ -71,17 +71,13 @@ public class VideoExporter {
 
                 mainHandler.post(() -> callback.onProgress("Encoding video..."));
 
-                // FIX: this ffmpeg-kit build does not include libx264
-                // (software encoder) — only h264_mediacodec (hardware)
-                // is compiled in. -preset/-crf are libx264-only options
-                // and don't apply to mediacodec, so they're dropped in
-                // favor of a target bitrate.
                 String command = String.format(
-        "-y -i \"%s\" -vf \"subtitles='%s':fontsdir='/system/fonts'\" -c:v h264_mediacodec -b:v 4M "
-                + "-c:a copy \"%s\"",
-        tempInputVideo.getAbsolutePath(),
-        assFile.getAbsolutePath().replace("'", "'\\''"),
-        outputVideo.getAbsolutePath());
+                        "-y -i \"%s\" -vf \"subtitles='%s':fontsdir='%s'\" "
+                                + "-c:v h264_mediacodec -b:v 4M -c:a copy \"%s\"",
+                        tempInputVideo.getAbsolutePath(),
+                        assFile.getAbsolutePath().replace("'", "'\\''"),
+                        fontsDir.getAbsolutePath().replace("'", "'\\''"),
+                        outputVideo.getAbsolutePath());
 
                 FFmpegSession session = FFmpegKit.execute(command);
 
@@ -106,7 +102,8 @@ public class VideoExporter {
             } finally {
                 tempInputVideo.delete();
                 assFile.delete();
-                outputVideo.delete(); // already copied into MediaStore
+                outputVideo.delete();
+                deleteRecursive(fontsDir);
             }
         }).start();
     }
@@ -168,5 +165,16 @@ public class VideoExporter {
         }
 
         return itemUri;
+    }
+
+    private static void deleteRecursive(File file) {
+        if (file == null || !file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) deleteRecursive(child);
+            }
+        }
+        file.delete();
     }
 }
