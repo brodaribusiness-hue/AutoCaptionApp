@@ -71,19 +71,20 @@ public class VideoExporter {
 
                 mainHandler.post(() -> callback.onProgress("Encoding video..."));
 
+                // FIX: this ffmpeg-kit build does not include libx264
+                // (software encoder) — only h264_mediacodec (hardware)
+                // is compiled in. -preset/-crf are libx264-only options
+                // and don't apply to mediacodec, so they're dropped in
+                // favor of a target bitrate.
                 String command = String.format(
-                        "-y -i \"%s\" -vf \"subtitles='%s'\" -c:v libx264 -preset fast "
-                                + "-crf 20 -c:a copy \"%s\"",
+                        "-y -i \"%s\" -vf \"subtitles='%s'\" -c:v h264_mediacodec -b:v 4M "
+                                + "-c:a copy \"%s\"",
                         tempInputVideo.getAbsolutePath(),
                         assFile.getAbsolutePath().replace("'", "'\\''"),
                         outputVideo.getAbsolutePath());
 
                 FFmpegSession session = FFmpegKit.execute(command);
 
-                // FIX: getFailStackTrace() often returns null when ffmpeg
-                // itself reports the error (bad filter, bad path, etc.)
-                // rather than the FFmpegKit wrapper crashing. The actual
-                // reason is in the process's own log output instead.
                 if (!ReturnCode.isSuccess(session.getReturnCode())) {
                     String logs = session.getAllLogsAsString();
                     throw new Exception(
