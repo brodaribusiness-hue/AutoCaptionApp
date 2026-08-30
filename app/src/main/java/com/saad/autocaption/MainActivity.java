@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
     private Spinner captionColorSpinner;
     private Spinner captionStyleSpinner;
     private Spinner positionSpinner;
+    private AspectRatioFrameLayout videoPreviewContainer;
     private Uri videoUri;
     private File extractedWavFile;
     private List<Caption> captions;
@@ -66,11 +67,10 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.layout_main);
-private com.saad.autocaption.AspectRatioFrameLayout videoPreviewContainer;
-...
-videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
+
         videoSurface = (SurfaceView) findViewById(R.id.videoSurface);
         captionText = (TextView) findViewById(R.id.captionText);
+        videoPreviewContainer = (AspectRatioFrameLayout) findViewById(R.id.videoPreviewContainer);
         Button selectVideoButton = (Button) findViewById(R.id.selectVideoButton);
         generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
         exportButton = (Button) findViewById(R.id.exportButton);
@@ -151,7 +151,46 @@ videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
         exportButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                statusText.setText("Export coming soon");
+                if (captions == null || captions.isEmpty() || videoUri == null) {
+                    statusText.setText("Generate captions before exporting");
+                    return;
+                }
+                exportButton.setEnabled(false);
+                generateCaptionsButton.setEnabled(false);
+
+                VideoExporter.export(
+                        MainActivity.this,
+                        videoUri,
+                        captions,
+                        "sans-serif", // TODO: map selectedTypeface -> real font family / fontsdir
+                        selectedFontSizeSp,
+                        selectedColor,
+                        selectedGravity,
+                        selectedStyle,
+                        new VideoExporter.ExportCallback() {
+                            @Override
+                            public void onProgress(String message) {
+                                runOnUiThread(() -> statusText.setText(message));
+                            }
+
+                            @Override
+                            public void onSuccess(Uri savedUri) {
+                                runOnUiThread(() -> {
+                                    statusText.setText("Saved to gallery!");
+                                    exportButton.setEnabled(true);
+                                    generateCaptionsButton.setEnabled(true);
+                                });
+                            }
+
+                            @Override
+                            public void onError(String message) {
+                                runOnUiThread(() -> {
+                                    statusText.setText(message);
+                                    exportButton.setEnabled(true);
+                                    generateCaptionsButton.setEnabled(true);
+                                });
+                            }
+                        });
             }
         });
     }
@@ -178,7 +217,6 @@ videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
         });
     }
 
-    // NEW
     private void setupFontSizeSpinner() {
         CaptionStyleOptions.FontSizeOption[] sizes = CaptionStyleOptions.getFontSizeOptions();
 
@@ -187,7 +225,6 @@ videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         fontSizeSpinner.setAdapter(adapter);
 
-        // Default to Medium
         for (int i = 0; i < sizes.length; i++) {
             if (sizes[i].sizeSp == selectedFontSizeSp) {
                 fontSizeSpinner.setSelection(i);
@@ -234,7 +271,6 @@ videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
         });
     }
 
-    // NEW
     private void setupStyleSpinner() {
         CaptionStyleOptions.StyleOption[] styles = CaptionStyleOptions.getStyleOptions();
 
@@ -255,7 +291,6 @@ videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
         });
     }
 
-    // NEW
     private void setupPositionSpinner() {
         CaptionStyleOptions.PositionOption[] positions = CaptionStyleOptions.getPositionOptions();
 
@@ -264,7 +299,6 @@ videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         positionSpinner.setAdapter(adapter);
 
-        // Default to Bottom
         for (int i = 0; i < positions.length; i++) {
             if (positions[i].gravity == selectedGravity) {
                 positionSpinner.setSelection(i);
@@ -285,9 +319,6 @@ videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
         });
     }
 
-    // NEW: captionText's parent is AspectRatioFrameLayout (a FrameLayout),
-    // so layout_gravity lives in FrameLayout.LayoutParams — update it at
-    // runtime to move the caption between top/middle/bottom.
     private void applyCaptionGravity(int gravity) {
         FrameLayout.LayoutParams params =
                 (FrameLayout.LayoutParams) captionText.getLayoutParams();
@@ -488,8 +519,6 @@ videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
                 });
     }
 
-    // NEW: builds the highlight span for the actively-spoken word based
-    // on the currently selected caption style.
     private Object buildActiveWordSpan() {
         switch (selectedStyle) {
             case OUTLINE:
@@ -606,20 +635,13 @@ videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
             mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 @Override
                 public void onPrepared(MediaPlayer mp) {
+                    int vw = mp.getVideoWidth();
+                    int vh = mp.getVideoHeight();
+                    if (vw > 0 && vh > 0) {
+                        videoPreviewContainer.setAspectRatio(vw, vh);
+                    }
                     mp.setLooping(true);
                     mp.start();
-               mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-    @Override
-    public void onPrepared(MediaPlayer mp) {
-        int vw = mp.getVideoWidth();
-        int vh = mp.getVideoHeight();
-        if (vw > 0 && vh > 0) {
-            videoPreviewContainer.setAspectRatio(vw, vh);
-        }
-        mp.setLooping(true);
-        mp.start();
-    }
-});
                 }
             });
 
