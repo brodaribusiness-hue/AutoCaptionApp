@@ -57,20 +57,16 @@ public class MainActivity extends AppCompatActivity {
     private Runnable captionUpdateRunnable;
 
     private Typeface selectedTypeface = Typeface.SANS_SERIF;
-    private int selectedColor = 0xFFFFEB3B; // default yellow
+    private int selectedColor = 0xFFFFEB3B;
     private float selectedFontSizeSp = 22f;
     private int selectedGravity = Gravity.BOTTOM;
     private CaptionStyleOptions.CaptionStyleType selectedStyle =
-            CaptionStyleOptions.CaptionStyleType.GLOW;
+            CaptionStyleOptions.CaptionStyleType.HIGHLIGHT_POP;
 
     private final AtomicInteger requestIdGenerator = new AtomicInteger(0);
     private volatile int currentRequestId = 0;
 
     private ActivityResultLauncher<Intent> pickVideoLauncher;
-
-    // NEW: asks for storage write permission, only needed on Android 9
-    // and below (Android 10+ apps can save to the gallery via
-    // MediaStore without this permission at all).
     private ActivityResultLauncher<String> storagePermissionLauncher;
 
     @Override
@@ -224,9 +220,8 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // NEW
     private void requestStoragePermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) { // Android 9 and below
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
             boolean granted = ContextCompat.checkSelfPermission(
                     this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED;
@@ -560,24 +555,47 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
+    // UPDATED: returns the active-word span for each of the 8 styles.
+    // MINIMAL_CLEAN returns null — no special highlight, handled below.
     private Object buildActiveWordSpan() {
         switch (selectedStyle) {
-            case OUTLINE:
-                return new OutlineSpan(selectedColor, 0xFF000000, 6f);
+            case HIGHLIGHT_POP:
+                return new android.text.style.ForegroundColorSpan(0xFFFF9800); // orange
 
-            case BACKGROUND_BOX:
-                return new BackgroundBoxSpan(0xFF000000, selectedColor, 12f, 16f);
+            case GREEN_EMPHASIS:
+                return new android.text.style.ForegroundColorSpan(0xFF4CAF50); // green
 
-            case KARAOKE_FILL:
+            case KARAOKE_FLOW:
                 return new KaraokeFillSpan(0xFFFFFFFF, selectedColor, 8f);
 
-            case POP_SCALE:
-                return new PopScaleSpan(selectedColor, 1.35f);
+            case ONE_WORD_PUNCH:
+                return new PopScaleSpan(selectedColor, 1.8f);
 
-            case GLOW:
+            case BOX_HIGHLIGHT:
+                return new BackgroundBoxSpan(0xFF000000, selectedColor, 12f, 16f);
+
+            case BOUNCE:
+                return new BounceSpan(selectedColor);
+
+            case GLOW_POP:
+                return new GlowPopSpan(selectedColor, 1.25f, 10f);
+
+            case MINIMAL_CLEAN:
             default:
-                int glowColor = (selectedColor & 0x00FFFFFF) | 0xAA000000;
-                return new GlowSpan(selectedColor, glowColor, 10f);
+                return null;
+        }
+    }
+
+    // UPDATED: rest-of-line (non-active) word color depends on style —
+    // white for the "white text" styles, soft grey for the rest.
+    private int restWordColor() {
+        switch (selectedStyle) {
+            case HIGHLIGHT_POP:
+            case GREEN_EMPHASIS:
+            case MINIMAL_CLEAN:
+                return 0xFFFFFFFF;
+            default:
+                return 0xCCCCCCCC;
         }
     }
 
@@ -613,13 +631,30 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
 
+                    android.text.SpannableStringBuilder builder =
+                            new android.text.SpannableStringBuilder();
+
+                    // NEW: One Word Punch shows ONLY the active word,
+                    // not the usual 4-5 word rolling window.
+                    if (selectedStyle == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH) {
+                        if (matchedIndex != -1) {
+                            Caption cap = captions.get(matchedIndex);
+                            builder.append(cap.word);
+                            builder.setSpan(buildActiveWordSpan(), 0, builder.length(), 0);
+                            builder.setSpan(
+                                    new android.text.style.StyleSpan(
+                                            android.graphics.Typeface.BOLD),
+                                    0, builder.length(), 0);
+                        }
+                        captionText.setText(builder);
+                        captionUpdateHandler.postDelayed(this, 100);
+                        return;
+                    }
+
                     int wordsBefore = 2;
                     int wordsAfter = 2;
                     int startIdx = Math.max(0, anchorIndex - wordsBefore);
                     int endIdx = Math.min(captions.size() - 1, anchorIndex + wordsAfter);
-
-                    android.text.SpannableStringBuilder builder =
-                            new android.text.SpannableStringBuilder();
 
                     for (int i = startIdx; i <= endIdx; i++) {
                         Caption cap = captions.get(i);
@@ -628,10 +663,22 @@ public class MainActivity extends AppCompatActivity {
                         builder.append(cap.word);
                         int end = builder.length();
 
-                        if (i == matchedIndex) {
-                            builder.setSpan(buildActiveWordSpan(), start, end, 0);
-                            if (selectedStyle != CaptionStyleOptions.CaptionStyleType.BACKGROUND_BOX
-                                    && selectedStyle != CaptionStyleOptions.CaptionStyleType.KARAOKE_FILL) {
+                        if (selectedStyle == CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN) {
+                            // Clean uniform style — no active-word distinction.
+                            builder.setSpan(
+                                    new android.text.style.ForegroundColorSpan(0xFFFFFFFF),
+                                    start, end, 0);
+                            builder.setSpan(
+                                    new android.text.style.StyleSpan(
+                                            android.graphics.Typeface.BOLD),
+                                    start, end, 0);
+                        } else if (i == matchedIndex) {
+                            Object span = buildActiveWordSpan();
+                            if (span != null) {
+                                builder.setSpan(span, start, end, 0);
+                            }
+                            if (selectedStyle != CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT
+                                    && selectedStyle != CaptionStyleOptions.CaptionStyleType.KARAOKE_FLOW) {
                                 builder.setSpan(
                                         new android.text.style.StyleSpan(
                                                 android.graphics.Typeface.BOLD),
@@ -639,7 +686,7 @@ public class MainActivity extends AppCompatActivity {
                             }
                         } else {
                             builder.setSpan(
-                                    new android.text.style.ForegroundColorSpan(0xCCCCCCCC),
+                                    new android.text.style.ForegroundColorSpan(restWordColor()),
                                     start, end, 0);
                         }
 
