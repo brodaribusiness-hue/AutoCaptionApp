@@ -45,10 +45,8 @@ public class MainActivity extends AppCompatActivity {
     private Button generateCaptionsButton;
     private Button exportButton;
     private Spinner fontStyleSpinner;
-    private Spinner fontSizeSpinner;
     private Spinner captionColorSpinner;
     private Spinner captionStyleSpinner;
-    private Spinner positionSpinner;
     private AspectRatioFrameLayout videoPreviewContainer;
     private Uri videoUri;
     private File extractedWavFile;
@@ -59,8 +57,13 @@ public class MainActivity extends AppCompatActivity {
     private Typeface selectedTypeface = Typeface.SANS_SERIF;
     private CaptionStyleOptions.FontOption selectedFontOption;
     private int selectedColor = 0xFFFFEB3B;
-    private float selectedFontSizeSp = 22f;
-    private int selectedGravity = Gravity.BOTTOM;
+
+    // NOTE: font size and position are no longer spinner-controlled —
+    // they'll become touch-drag/resize controls in a follow-up step.
+    // Fixed sensible defaults for now.
+    private final float selectedFontSizeSp = 22f;
+    private final int selectedGravity = Gravity.BOTTOM;
+
     private CaptionStyleOptions.CaptionStyleType selectedStyle =
             CaptionStyleOptions.CaptionStyleType.HIGHLIGHT_POP;
 
@@ -102,10 +105,8 @@ public class MainActivity extends AppCompatActivity {
         exportButton = (Button) findViewById(R.id.exportButton);
         statusText = (TextView) findViewById(R.id.statusText);
         fontStyleSpinner = (Spinner) findViewById(R.id.fontStyleSpinner);
-        fontSizeSpinner = (Spinner) findViewById(R.id.fontSizeSpinner);
         captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
         captionStyleSpinner = (Spinner) findViewById(R.id.captionStyleSpinner);
-        positionSpinner = (Spinner) findViewById(R.id.positionSpinner);
 
         captionText.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         captionText.setTypeface(selectedTypeface);
@@ -116,10 +117,8 @@ public class MainActivity extends AppCompatActivity {
         exportButton.setEnabled(false);
 
         setupFontSpinner();
-        setupFontSizeSpinner();
         setupColorSpinner();
         setupStyleSpinner();
-        setupPositionSpinner();
 
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
@@ -257,35 +256,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void setupFontSizeSpinner() {
-        CaptionStyleOptions.FontSizeOption[] sizes = CaptionStyleOptions.getFontSizeOptions();
-
-        ArrayAdapter<CaptionStyleOptions.FontSizeOption> adapter =
-                new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, sizes);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        fontSizeSpinner.setAdapter(adapter);
-
-        for (int i = 0; i < sizes.length; i++) {
-            if (sizes[i].sizeSp == selectedFontSizeSp) {
-                fontSizeSpinner.setSelection(i);
-                break;
-            }
-        }
-
-        fontSizeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                CaptionStyleOptions.FontSizeOption chosen = sizes[position];
-                selectedFontSizeSp = chosen.sizeSp;
-                captionText.setTextSize(TypedValue.COMPLEX_UNIT_SP, selectedFontSizeSp);
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
-        });
-    }
-
     private void setupColorSpinner() {
         CaptionStyleOptions.ColorOption[] colors = CaptionStyleOptions.getColorOptions();
 
@@ -323,34 +293,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 selectedStyle = styles[position].type;
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
-        });
-    }
-
-    private void setupPositionSpinner() {
-        CaptionStyleOptions.PositionOption[] positions = CaptionStyleOptions.getPositionOptions();
-
-        ArrayAdapter<CaptionStyleOptions.PositionOption> adapter =
-                new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, positions);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        positionSpinner.setAdapter(adapter);
-
-        for (int i = 0; i < positions.length; i++) {
-            if (positions[i].gravity == selectedGravity) {
-                positionSpinner.setSelection(i);
-                break;
-            }
-        }
-
-        positionSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                selectedGravity = positions[position].gravity;
-                applyCaptionGravity(selectedGravity);
             }
 
             @Override
@@ -649,8 +591,11 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
 
-                    int wordsBefore = 2;
-                    int wordsAfter = 2;
+                    // CHANGED: only 3 words on screen at once —
+                    // 1 word before the active word, the active word,
+                    // 1 word after.
+                    int wordsBefore = 1;
+                    int wordsAfter = 1;
                     int startIdx = Math.max(0, anchorIndex - wordsBefore);
                     int endIdx = Math.min(captions.size() - 1, anchorIndex + wordsAfter);
 
