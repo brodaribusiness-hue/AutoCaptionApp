@@ -94,22 +94,6 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Font Size"
-            android:textColor="#CCCCCC"
-            android:textSize="14sp"
-            android:layout_marginTop="16dp" />
-
-        <Spinner
-            android:id="@+id/fontSizeSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="#1E1E1E"
-            android:popupBackground="#1E1E1E"
-            android:layout_marginTop="4dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
             android:text="Caption Color"
             android:textColor="#CCCCCC"
             android:textSize="14sp"
@@ -133,22 +117,6 @@
 
         <Spinner
             android:id="@+id/captionStyleSpinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:background="#1E1E1E"
-            android:popupBackground="#1E1E1E"
-            android:layout_marginTop="4dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Caption Position"
-            android:textColor="#CCCCCC"
-            android:textSize="14sp"
-            android:layout_marginTop="16dp" />
-
-        <Spinner
-            android:id="@+id/positionSpinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:background="#1E1E1E"
