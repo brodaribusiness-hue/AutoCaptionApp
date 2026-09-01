@@ -53,8 +53,8 @@ public class AssSubtitleBuilder {
         sb.append("[Events]\n");
         sb.append("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n");
 
-        int wordsBefore = 2;
-        int wordsAfter = 2;
+        int wordsBefore = 1;
+        int wordsAfter = 1;
 
         for (int matched = 0; matched < captions.size(); matched++) {
             Caption activeCap = captions.get(matched);
