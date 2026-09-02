@@ -45,6 +45,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView wordSlotAfter;
     private Button generateCaptionsButton;
     private Button exportButton;
+    private Button playPauseButton;
     private Spinner fontStyleSpinner;
     private Spinner captionColorSpinner;
     private Spinner captionStyleSpinner;
@@ -105,6 +106,27 @@ public class MainActivity extends AppCompatActivity {
         Button selectVideoButton = (Button) findViewById(R.id.selectVideoButton);
         generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
         exportButton = (Button) findViewById(R.id.exportButton);
+        playPauseButton = (Button) findViewById(R.id.playPauseButton);
+        playPauseButton.setEnabled(false);
+        Button selectVideoButton = (Button) findViewById(R.id.selectVideoButton);
+        generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
+        exportButton = (Button) findViewById(R.id.exportButton);
+        playPauseButton = (Button) findViewById(R.id.playPauseButton);
+        playPauseButton.setEnabled(false);
+
+        playPauseButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mediaPlayer == null) return;
+                if (mediaPlayer.isPlaying()) {
+                    mediaPlayer.pause();
+                    playPauseButton.setText("Play");
+                } else {
+                    mediaPlayer.start();
+                    playPauseButton.setText("Pause");
+                }
+            }
+        });  
         statusText = (TextView) findViewById(R.id.statusText);
         fontStyleSpinner = (Spinner) findViewById(R.id.fontStyleSpinner);
         captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
@@ -391,6 +413,7 @@ public class MainActivity extends AppCompatActivity {
         wordSlotActive.setText("");
         wordSlotAfter.setText("");
         exportButton.setEnabled(false);
+        playPauseButton.setEnabled(false);
 
         playVideo(videoUri);
 
@@ -547,10 +570,10 @@ public class MainActivity extends AppCompatActivity {
     private Object buildActiveWordSpan() {
         switch (selectedStyle) {
             case HIGHLIGHT_POP:
-                return new android.text.style.ForegroundColorSpan(0xFFFF9800);
+                return new android.text.style.ForegroundColorSpan(selectedColor);
 
             case GREEN_EMPHASIS:
-                return new android.text.style.ForegroundColorSpan(0xFF4CAF50);
+                return new android.text.style.ForegroundColorSpan(selectedColor);
 
             case KARAOKE_FLOW:
                 return new KaraokeFillSpan(0xFFFFFFFF, selectedColor, 8f);
@@ -625,10 +648,28 @@ public class MainActivity extends AppCompatActivity {
                 + slot.getPaddingLeft() + slot.getPaddingRight();
     }
 
+    // NEW: active word's span (PopScaleSpan/GlowPopSpan/BounceSpan) visually
+    // enlarges the rendered glyphs beyond what getPaint().measureText() reports
+    // (since that reads the TextView's base paint size, not the span's runtime
+    // scale). Without this correction, before/after slots overlap the active
+    // word for these 3 styles.
+    private float activeWordWidthScaleFactor() {
+        switch (selectedStyle) {
+            case ONE_WORD_PUNCH:
+                return 1.8f;
+            case GLOW_POP:
+                return 1.15f;
+            case BOUNCE:
+                return 1.25f; // peak bounce scale — worst case, keeps gap safe
+            default:
+                return 1f;
+        }
+    }
+
     private void autoSpaceSlots() {
         float gap = dpToPx(8);
 
-        float activeWidth = measureSlotWidth(wordSlotActive);
+        float activeWidth = measureSlotWidth(wordSlotActive) * activeWordWidthScaleFactor();
 
         if (!activeSlotGesture.isPositionDragged()) {
             wordSlotActive.setTranslationX(0f);
@@ -725,6 +766,8 @@ public class MainActivity extends AppCompatActivity {
                     }
                     mp.setLooping(true);
                     mp.start();
+                    playPauseButton.setEnabled(true);
+                    playPauseButton.setText("Pause");
                 }
             });
 
