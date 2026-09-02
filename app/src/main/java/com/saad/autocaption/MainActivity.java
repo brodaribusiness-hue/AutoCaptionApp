@@ -121,11 +121,6 @@ public class MainActivity extends AppCompatActivity {
         wordSlotActive.setTextSize(TypedValue.COMPLEX_UNIT_SP, selectedFontSizeSp);
         wordSlotAfter.setTextSize(TypedValue.COMPLEX_UNIT_SP, selectedFontSizeSp);
 
-        // Default spacing so the 3 slots don't overlap before the user
-        // drags them anywhere — active word stays centered.
-        wordSlotBefore.post(() -> wordSlotBefore.setTranslationX(-dpToPx(70)));
-        wordSlotAfter.post(() -> wordSlotAfter.setTranslationX(dpToPx(70)));
-
         beforeSlotGesture = new SlotGestureHelper(this);
         wordSlotBefore.setOnTouchListener(beforeSlotGesture);
 
@@ -614,6 +609,41 @@ public class MainActivity extends AppCompatActivity {
         slot.setText(spannable);
     }
 
+    // NEW: measures how wide a slot's current text actually renders,
+    // including its own left/right padding.
+    private float measureSlotWidth(TextView slot) {
+        CharSequence text = slot.getText();
+        if (text == null || text.length() == 0) {
+            return 0f;
+        }
+        return slot.getPaint().measureText(text, 0, text.length())
+                + slot.getPaddingLeft() + slot.getPaddingRight();
+    }
+
+    // NEW: places before/active/after slots side-by-side based on their
+    // actual measured width, with a small fixed gap — only for slots the
+    // user hasn't manually dragged. Prevents overlap on long words and
+    // excess empty gap on short words.
+    private void autoSpaceSlots() {
+        float gap = dpToPx(8);
+
+        float activeWidth = measureSlotWidth(wordSlotActive);
+
+        if (!activeSlotGesture.isPositionDragged()) {
+            wordSlotActive.setTranslationX(0f);
+        }
+
+        if (!beforeSlotGesture.isPositionDragged()) {
+            float beforeWidth = measureSlotWidth(wordSlotBefore);
+            wordSlotBefore.setTranslationX(-(activeWidth / 2f + gap + beforeWidth / 2f));
+        }
+
+        if (!afterSlotGesture.isPositionDragged()) {
+            float afterWidth = measureSlotWidth(wordSlotAfter);
+            wordSlotAfter.setTranslationX(activeWidth / 2f + gap + afterWidth / 2f);
+        }
+    }
+
     private void startCaptionUpdates() {
         captionUpdateRunnable = new Runnable() {
             @Override
@@ -658,6 +688,8 @@ public class MainActivity extends AppCompatActivity {
                     applySlotStyle(wordSlotBefore, beforeWord, false);
                     applySlotStyle(wordSlotActive, activeWord, true);
                     applySlotStyle(wordSlotAfter, afterWord, false);
+
+                    autoSpaceSlots();
                 }
                 captionUpdateHandler.postDelayed(this, 100);
             }
