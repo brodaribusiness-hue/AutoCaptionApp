@@ -765,8 +765,11 @@ public class MainActivity extends AppCompatActivity {
             }
         } catch (Exception ignored) {
             // fall back to whatever mp.getVideoWidth/Height already gave us
-        } finally {
-            retriever.release();
+         } finally {
+            try {
+                retriever.release();
+            } catch (Exception ignored) {
+            }
         }
         videoPreviewContainer.setAspectRatio(width, height);
     }
