@@ -13,14 +13,12 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.text.InputType;
 import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.View;
 import android.view.SurfaceView;
 import android.view.SurfaceHolder;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.FrameLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.AdapterView;
@@ -41,7 +39,9 @@ public class MainActivity extends AppCompatActivity {
     private SurfaceHolder surfaceHolder;
     private MediaPlayer mediaPlayer;
     private TextView statusText;
-    private TextView captionText;
+    private TextView wordSlotBefore;
+    private TextView wordSlotActive;
+    private TextView wordSlotAfter;
     private Button generateCaptionsButton;
     private Button exportButton;
     private Spinner fontStyleSpinner;
@@ -54,12 +54,14 @@ public class MainActivity extends AppCompatActivity {
     private Handler captionUpdateHandler;
     private Runnable captionUpdateRunnable;
 
+    private SlotGestureHelper beforeSlotGesture;
+    private SlotGestureHelper activeSlotGesture;
+    private SlotGestureHelper afterSlotGesture;
+
     private Typeface selectedTypeface = Typeface.SANS_SERIF;
     private CaptionStyleOptions.FontOption selectedFontOption;
     private int selectedColor = 0xFFFFEB3B;
-
     private final float selectedFontSizeSp = 22f;
-    private final int selectedGravity = Gravity.BOTTOM;
 
     private CaptionStyleOptions.CaptionStyleType selectedStyle =
             CaptionStyleOptions.CaptionStyleType.HIGHLIGHT_POP;
@@ -95,8 +97,10 @@ public class MainActivity extends AppCompatActivity {
         requestStoragePermissionIfNeeded();
 
         videoSurface = (SurfaceView) findViewById(R.id.videoSurface);
-        captionText = (TextView) findViewById(R.id.captionText);
         videoPreviewContainer = (AspectRatioFrameLayout) findViewById(R.id.videoPreviewContainer);
+        wordSlotBefore = (TextView) findViewById(R.id.wordSlotBefore);
+        wordSlotActive = (TextView) findViewById(R.id.wordSlotActive);
+        wordSlotAfter = (TextView) findViewById(R.id.wordSlotAfter);
         Button selectVideoButton = (Button) findViewById(R.id.selectVideoButton);
         generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
         exportButton = (Button) findViewById(R.id.exportButton);
@@ -105,10 +109,31 @@ public class MainActivity extends AppCompatActivity {
         captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
         captionStyleSpinner = (Spinner) findViewById(R.id.captionStyleSpinner);
 
-        captionText.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-        captionText.setTypeface(selectedTypeface);
-        captionText.setTextSize(TypedValue.COMPLEX_UNIT_SP, selectedFontSizeSp);
-        applyCaptionGravity(selectedGravity);
+        wordSlotBefore.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        wordSlotActive.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        wordSlotAfter.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+
+        wordSlotBefore.setTypeface(selectedTypeface);
+        wordSlotActive.setTypeface(selectedTypeface);
+        wordSlotAfter.setTypeface(selectedTypeface);
+
+        wordSlotBefore.setTextSize(TypedValue.COMPLEX_UNIT_SP, selectedFontSizeSp);
+        wordSlotActive.setTextSize(TypedValue.COMPLEX_UNIT_SP, selectedFontSizeSp);
+        wordSlotAfter.setTextSize(TypedValue.COMPLEX_UNIT_SP, selectedFontSizeSp);
+
+        // Default spacing so the 3 slots don't overlap before the user
+        // drags them anywhere — active word stays centered.
+        wordSlotBefore.post(() -> wordSlotBefore.setTranslationX(-dpToPx(70)));
+        wordSlotAfter.post(() -> wordSlotAfter.setTranslationX(dpToPx(70)));
+
+        beforeSlotGesture = new SlotGestureHelper(this);
+        wordSlotBefore.setOnTouchListener(beforeSlotGesture);
+
+        activeSlotGesture = new SlotGestureHelper(this);
+        wordSlotActive.setOnTouchListener(activeSlotGesture);
+
+        afterSlotGesture = new SlotGestureHelper(this);
+        wordSlotAfter.setOnTouchListener(afterSlotGesture);
 
         generateCaptionsButton.setEnabled(false);
         exportButton.setEnabled(false);
@@ -164,7 +189,9 @@ public class MainActivity extends AppCompatActivity {
                     final int requestId = currentRequestId;
                     generateCaptionsButton.setEnabled(false);
                     captions = null;
-                    captionText.setText("");
+                    wordSlotBefore.setText("");
+                    wordSlotActive.setText("");
+                    wordSlotAfter.setText("");
                     extractAudio(videoUri, requestId);
                 }
             }
@@ -180,6 +207,19 @@ public class MainActivity extends AppCompatActivity {
                 exportButton.setEnabled(false);
                 generateCaptionsButton.setEnabled(false);
 
+                int previewWidthPx = videoPreviewContainer.getWidth();
+                int previewHeightPx = videoPreviewContainer.getHeight();
+
+                CaptionSlotTransform beforeTransform = new CaptionSlotTransform(
+                        wordSlotBefore.getTranslationX(), wordSlotBefore.getTranslationY(),
+                        beforeSlotGesture.getScale());
+                CaptionSlotTransform activeTransform = new CaptionSlotTransform(
+                        wordSlotActive.getTranslationX(), wordSlotActive.getTranslationY(),
+                        activeSlotGesture.getScale());
+                CaptionSlotTransform afterTransform = new CaptionSlotTransform(
+                        wordSlotAfter.getTranslationX(), wordSlotAfter.getTranslationY(),
+                        afterSlotGesture.getScale());
+
                 VideoExporter.export(
                         MainActivity.this,
                         videoUri,
@@ -187,8 +227,12 @@ public class MainActivity extends AppCompatActivity {
                         selectedFontOption,
                         selectedFontSizeSp,
                         selectedColor,
-                        selectedGravity,
                         selectedStyle,
+                        previewWidthPx,
+                        previewHeightPx,
+                        beforeTransform,
+                        activeTransform,
+                        afterTransform,
                         new VideoExporter.ExportCallback() {
                             @Override
                             public void onProgress(String message) {
@@ -215,6 +259,10 @@ public class MainActivity extends AppCompatActivity {
                         });
             }
         });
+    }
+
+    private float dpToPx(float dp) {
+        return dp * getResources().getDisplayMetrics().density;
     }
 
     private void requestStoragePermissionIfNeeded() {
@@ -244,7 +292,9 @@ public class MainActivity extends AppCompatActivity {
                 CaptionStyleOptions.FontOption chosen = fonts[position];
                 selectedFontOption = chosen;
                 selectedTypeface = CaptionStyleOptions.resolveTypeface(MainActivity.this, chosen);
-                captionText.setTypeface(selectedTypeface);
+                wordSlotBefore.setTypeface(selectedTypeface);
+                wordSlotActive.setTypeface(selectedTypeface);
+                wordSlotAfter.setTypeface(selectedTypeface);
             }
 
             @Override
@@ -298,13 +348,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void applyCaptionGravity(int gravity) {
-        FrameLayout.LayoutParams params =
-                (FrameLayout.LayoutParams) captionText.getLayoutParams();
-        params.gravity = gravity;
-        captionText.setLayoutParams(params);
-    }
-
     private void showCustomColorDialog() {
         EditText input = new EditText(this);
         input.setHint("#RRGGBB e.g. #FF00FF");
@@ -342,7 +385,9 @@ public class MainActivity extends AppCompatActivity {
         currentRequestId = requestIdGenerator.incrementAndGet();
 
         captions = null;
-        captionText.setText("");
+        wordSlotBefore.setText("");
+        wordSlotActive.setText("");
+        wordSlotAfter.setText("");
         exportButton.setEnabled(false);
 
         playVideo(videoUri);
@@ -538,6 +583,37 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void applySlotStyle(TextView slot, String word, boolean isActive) {
+        if (word == null || word.isEmpty()) {
+            slot.setText("");
+            return;
+        }
+
+        if (selectedStyle == CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN) {
+            slot.setText(word);
+            slot.setTextColor(0xFFFFFFFF);
+            slot.setTypeface(selectedTypeface, Typeface.BOLD);
+            return;
+        }
+
+        if (!isActive) {
+            slot.setText(word);
+            slot.setTextColor(restWordColor());
+            slot.setTypeface(selectedTypeface, Typeface.NORMAL);
+            return;
+        }
+
+        android.text.SpannableString spannable = new android.text.SpannableString(word);
+        Object span = buildActiveWordSpan();
+        if (span != null) {
+            spannable.setSpan(span, 0, word.length(), 0);
+        }
+        boolean skipBold = selectedStyle == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT
+                || selectedStyle == CaptionStyleOptions.CaptionStyleType.KARAOKE_FLOW;
+        slot.setTypeface(selectedTypeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
+        slot.setText(spannable);
+    }
+
     private void startCaptionUpdates() {
         captionUpdateRunnable = new Runnable() {
             @Override
@@ -570,68 +646,18 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
 
-                    android.text.SpannableStringBuilder builder =
-                            new android.text.SpannableStringBuilder();
+                    boolean oneWordPunch =
+                            selectedStyle == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
 
-                    if (selectedStyle == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH) {
-                        if (matchedIndex != -1) {
-                            Caption cap = captions.get(matchedIndex);
-                            builder.append(cap.word);
-                            builder.setSpan(buildActiveWordSpan(), 0, builder.length(), 0);
-                            builder.setSpan(
-                                    new android.text.style.StyleSpan(
-                                            android.graphics.Typeface.BOLD),
-                                    0, builder.length(), 0);
-                        }
-                        captionText.setText(builder);
-                        captionUpdateHandler.postDelayed(this, 100);
-                        return;
-                    }
+                    String beforeWord = (!oneWordPunch && anchorIndex - 1 >= 0)
+                            ? captions.get(anchorIndex - 1).word : "";
+                    String activeWord = captions.get(anchorIndex).word;
+                    String afterWord = (!oneWordPunch && anchorIndex + 1 < captions.size())
+                            ? captions.get(anchorIndex + 1).word : "";
 
-                    int wordsBefore = 1;
-                    int wordsAfter = 1;
-                    int startIdx = Math.max(0, anchorIndex - wordsBefore);
-                    int endIdx = Math.min(captions.size() - 1, anchorIndex + wordsAfter);
-
-                    for (int i = startIdx; i <= endIdx; i++) {
-                        Caption cap = captions.get(i);
-
-                        int start = builder.length();
-                        builder.append(cap.word);
-                        int end = builder.length();
-
-                        if (selectedStyle == CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN) {
-                            builder.setSpan(
-                                    new android.text.style.ForegroundColorSpan(0xFFFFFFFF),
-                                    start, end, 0);
-                            builder.setSpan(
-                                    new android.text.style.StyleSpan(
-                                            android.graphics.Typeface.BOLD),
-                                    start, end, 0);
-                        } else if (i == matchedIndex) {
-                            Object span = buildActiveWordSpan();
-                            if (span != null) {
-                                builder.setSpan(span, start, end, 0);
-                            }
-                            if (selectedStyle != CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT
-                                    && selectedStyle != CaptionStyleOptions.CaptionStyleType.KARAOKE_FLOW) {
-                                builder.setSpan(
-                                        new android.text.style.StyleSpan(
-                                                android.graphics.Typeface.BOLD),
-                                        start, end, 0);
-                            }
-                        } else {
-                            builder.setSpan(
-                                    new android.text.style.ForegroundColorSpan(restWordColor()),
-                                    start, end, 0);
-                        }
-
-                        if (i != endIdx) {
-                            builder.append(" ");
-                        }
-                    }
-
-                    captionText.setText(builder);
+                    applySlotStyle(wordSlotBefore, beforeWord, false);
+                    applySlotStyle(wordSlotActive, activeWord, true);
+                    applySlotStyle(wordSlotAfter, afterWord, false);
                 }
                 captionUpdateHandler.postDelayed(this, 100);
             }
