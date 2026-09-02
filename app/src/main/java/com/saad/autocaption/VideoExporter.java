@@ -47,7 +47,7 @@ public class VideoExporter {
 
         if (previewWidthPx <= 0 || previewHeightPx <= 0) {
             mainHandler.post(() -> callback.onError(
-                    "Preview not ready yet — try again in a moment"));
+                    "Preview not ready yet.try again in a moment"));
             return;
         }
 
