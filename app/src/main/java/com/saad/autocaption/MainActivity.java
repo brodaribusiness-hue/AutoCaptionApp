@@ -4,6 +4,7 @@ import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
+import android.media.MediaMetadataRetriever;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -192,86 +193,75 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        // ... existing code ...
-exportButton.setOnClickListener(new View.OnClickListener() {
-    @Override
-    public void onClick(View v) {
-        if (captions == null || captions.isEmpty() || videoUri == null) {
-            statusText.setText("Generate captions before exporting");
-            return;
-        }
+        exportButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (captions == null || captions.isEmpty() || videoUri == null) {
+                    statusText.setText("Generate captions before exporting");
+                    return;
+                }
 
-        int previewWidthPx = videoPreviewContainer.getWidth();
-        int previewHeightPx = videoPreviewContainer.getHeight();
+                int previewWidthPx = videoPreviewContainer.getWidth();
+                int previewHeightPx = videoPreviewContainer.getHeight();
 
-        // GUARD: don't even kick off the background thread if layout isn't ready
-        if (previewWidthPx <= 0 || previewHeightPx <= 0) {
-            statusText.setText("Preview not ready yet — wait a moment and try again");
-            return;
-        }
+                if (previewWidthPx <= 0 || previewHeightPx <= 0) {
+                    statusText.setText("Preview not ready yet — wait a moment and try again");
+                    return;
+                }
 
-        exportButton.setEnabled(false);
-        generateCaptionsButton.setEnabled(false);
+                exportButton.setEnabled(false);
+                generateCaptionsButton.setEnabled(false);
 
-        CaptionSlotTransform beforeTransform = new CaptionSlotTransform(
-                wordSlotBefore.getTranslationX(), wordSlotBefore.getTranslationY(),
-                beforeSlotGesture.getScale());
-        CaptionSlotTransform activeTransform = new CaptionSlotTransform(
-                wordSlotActive.getTranslationX(), wordSlotActive.getTranslationY(),
-                activeSlotGesture.getScale());
-        CaptionSlotTransform afterTransform = new CaptionSlotTransform(
-                wordSlotAfter.getTranslationX(), wordSlotAfter.getTranslationY(),
-                afterSlotGesture.getScale());
+                CaptionSlotTransform beforeTransform = new CaptionSlotTransform(
+                        wordSlotBefore.getTranslationX(), wordSlotBefore.getTranslationY(),
+                        beforeSlotGesture.getScale());
+                CaptionSlotTransform activeTransform = new CaptionSlotTransform(
+                        wordSlotActive.getTranslationX(), wordSlotActive.getTranslationY(),
+                        activeSlotGesture.getScale());
+                CaptionSlotTransform afterTransform = new CaptionSlotTransform(
+                        wordSlotAfter.getTranslationX(), wordSlotAfter.getTranslationY(),
+                        afterSlotGesture.getScale());
 
-        VideoExporter.export(
-                MainActivity.this,
-                videoUri,
-                captions,
-                selectedFontOption,
-                wordSlotActive.getTextSize(),   // CHANGED: real rendered px, not raw sp
-                selectedColor,
-                selectedStyle,
-                previewWidthPx,
-                previewHeightPx,
-                beforeTransform,
-                activeTransform,
-                afterTransform,
-                new VideoExporter.ExportCallback() {
-                    // ... existing code (unchanged) ...
-                });
-    }
-});
-// ... existing code ...
+                VideoExporter.export(
+                        MainActivity.this,
+                        videoUri,
+                        captions,
+                        selectedFontOption,
+                        wordSlotActive.getTextSize(),
+                        selectedColor,
+                        selectedStyle,
+                        previewWidthPx,
+                        previewHeightPx,
+                        beforeTransform,
+                        activeTransform,
+                        afterTransform,
+                        new VideoExporter.ExportCallback() {
+                            @Override
+                            public void onProgress(String message) {
+                                runOnUiThread(() -> statusText.setText(message));
+                            }
 
-// NEW: rotation-corrected aspect ratio so preview matches export's coordinate space.
-// mp.getVideoWidth()/getVideoHeight() do NOT reliably reflect the container's
-// rotation metadata (device/OEM-dependent), but VideoExporter.readVideoDimensions
-// DOES correct for it via MediaMetadataRetriever — this must match or \pos in the
-// exported ASS won't line up with what the user dragged in the preview.
-private void applyRotationCorrectedAspectRatio(Uri uri, int fallbackW, int fallbackH) {
-    int width = fallbackW;
-    int height = fallbackH;
-    MediaMetadataRetriever retriever = new MediaMetadataRetriever();
-    try {
-        retriever.setDataSource(this, uri);
-        String wStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
-        String hStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
-        String rotStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
-        if (wStr != null && hStr != null) {
-            width = Integer.parseInt(wStr);
-            height = Integer.parseInt(hStr);
-            int rotation = rotStr != null ? Integer.parseInt(rotStr) : 0;
-            if (rotation == 90 || rotation == 270) {
-                int tmp = width; width = height; height = tmp;
+                            @Override
+                            public void onSuccess(Uri savedUri) {
+                                runOnUiThread(() -> {
+                                    statusText.setText("Saved to gallery!");
+                                    exportButton.setEnabled(true);
+                                    generateCaptionsButton.setEnabled(true);
+                                });
+                            }
+
+                            @Override
+                            public void onError(String message) {
+                                runOnUiThread(() -> {
+                                    statusText.setText(message);
+                                    exportButton.setEnabled(true);
+                                    generateCaptionsButton.setEnabled(true);
+                                });
+                            }
+                        });
             }
-        }
-    } catch (Exception ignored) {
-        // fall back to whatever mp.getVideoWidth/Height already gave us
-    } finally {
-        retriever.release();
+        });
     }
-    videoPreviewContainer.setAspectRatio(width, height);
-}
 
     private float dpToPx(float dp) {
         return dp * getResources().getDisplayMetrics().density;
@@ -626,8 +616,6 @@ private void applyRotationCorrectedAspectRatio(Uri uri, int fallbackW, int fallb
         slot.setText(spannable);
     }
 
-    // NEW: measures how wide a slot's current text actually renders,
-    // including its own left/right padding.
     private float measureSlotWidth(TextView slot) {
         CharSequence text = slot.getText();
         if (text == null || text.length() == 0) {
@@ -637,10 +625,6 @@ private void applyRotationCorrectedAspectRatio(Uri uri, int fallbackW, int fallb
                 + slot.getPaddingLeft() + slot.getPaddingRight();
     }
 
-    // NEW: places before/active/after slots side-by-side based on their
-    // actual measured width, with a small fixed gap — only for slots the
-    // user hasn't manually dragged. Prevents overlap on long words and
-    // excess empty gap on short words.
     private void autoSpaceSlots() {
         float gap = dpToPx(8);
 
@@ -737,7 +721,7 @@ private void applyRotationCorrectedAspectRatio(Uri uri, int fallbackW, int fallb
                     int vw = mp.getVideoWidth();
                     int vh = mp.getVideoHeight();
                     if (vw > 0 && vh > 0) {
-                        videoPreviewContainer.setAspectRatio(vw, vh);
+                        applyRotationCorrectedAspectRatio(uri, vw, vh);
                     }
                     mp.setLooping(true);
                     mp.start();
@@ -757,6 +741,34 @@ private void applyRotationCorrectedAspectRatio(Uri uri, int fallbackW, int fallb
         } catch (Exception e) {
             statusText.setText("Error: " + e.getMessage());
         }
+    }
+
+    // NEW: rotation-corrected aspect ratio so preview matches export's coordinate space.
+    private void applyRotationCorrectedAspectRatio(Uri uri, int fallbackW, int fallbackH) {
+        int width = fallbackW;
+        int height = fallbackH;
+        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        try {
+            retriever.setDataSource(this, uri);
+            String wStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+            String hStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+            String rotStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+            if (wStr != null && hStr != null) {
+                width = Integer.parseInt(wStr);
+                height = Integer.parseInt(hStr);
+                int rotation = rotStr != null ? Integer.parseInt(rotStr) : 0;
+                if (rotation == 90 || rotation == 270) {
+                    int tmp = width;
+                    width = height;
+                    height = tmp;
+                }
+            }
+        } catch (Exception ignored) {
+            // fall back to whatever mp.getVideoWidth/Height already gave us
+        } finally {
+            retriever.release();
+        }
+        videoPreviewContainer.setAspectRatio(width, height);
     }
 
     @Override
