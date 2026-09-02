@@ -101,7 +101,7 @@ public class AssSubtitleBuilder {
             CaptionStyleOptions.CaptionStyleType style, String highlightAss, long durationMs) {
         switch (style) {
             case GREEN_EMPHASIS:
-                return "\\c&H0000FF00&\\b1";
+                return "\\c" + highlightAss + "\\b1";
 
             case MINIMAL_CLEAN:
                 return "\\c&HFFFFFF&\\b1";
