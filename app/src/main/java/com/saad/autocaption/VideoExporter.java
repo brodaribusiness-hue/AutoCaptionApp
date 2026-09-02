@@ -29,43 +29,96 @@ public class VideoExporter {
     }
 
     public static void export(
-        Context context,
-        Uri videoUri,
-        List<Caption> captions,
-        CaptionStyleOptions.FontOption fontOption,
-        float fontSizePreviewPx,      // CHANGED from fontSizeSp
-        int highlightColor,
-        CaptionStyleOptions.CaptionStyleType style,
-        int previewWidthPx,
-        int previewHeightPx,
-        CaptionSlotTransform beforeSlot,
-        CaptionSlotTransform activeSlot,
-        CaptionSlotTransform afterSlot,
-        ExportCallback callback) {
+            Context context,
+            Uri videoUri,
+            List<Caption> captions,
+            CaptionStyleOptions.FontOption fontOption,
+            float fontSizePreviewPx,
+            int highlightColor,
+            CaptionStyleOptions.CaptionStyleType style,
+            int previewWidthPx,
+            int previewHeightPx,
+            CaptionSlotTransform beforeSlot,
+            CaptionSlotTransform activeSlot,
+            CaptionSlotTransform afterSlot,
+            ExportCallback callback) {
 
-    Handler mainHandler = new Handler(Looper.getMainLooper());
+        Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    // GUARD: reject export if preview wasn't measured yet — otherwise \pos math
-    // divides by near-zero and captions burn in at garbage coordinates.
-    if (previewWidthPx <= 0 || previewHeightPx <= 0) {
-        mainHandler.post(() -> callback.onError(
-                "Preview not ready yet — try again in a moment"));
-        return;
+        if (previewWidthPx <= 0 || previewHeightPx <= 0) {
+            mainHandler.post(() -> callback.onError(
+                    "Preview not ready yet — try again in a moment"));
+            return;
+        }
+
+        new Thread(() -> {
+            File tempInputVideo = new File(context.getCacheDir(), "export_input.mp4");
+            File assFile = new File(context.getCacheDir(), "export_captions.ass");
+            File fontsDir = new File(context.getCacheDir(), "export_fonts");
+            File outputVideo = new File(context.getCacheDir(),
+                    "auto_caption_export_" + System.currentTimeMillis() + ".mp4");
+
+            try {
+                mainHandler.post(() -> callback.onProgress("Preparing video..."));
+                copyUriToFile(context, videoUri, tempInputVideo);
+
+                int[] dims = readVideoDimensions(context, videoUri);
+                int videoWidth = dims[0];
+                int videoHeight = dims[1];
+
+                mainHandler.post(() -> callback.onProgress("Preparing font..."));
+                String familyName = CaptionStyleOptions.prepareExportFont(
+                        context, fontOption, fontsDir);
+
+                mainHandler.post(() -> callback.onProgress("Building captions..."));
+                String assContent = AssSubtitleBuilder.build(
+                        captions, videoWidth, videoHeight,
+                        previewWidthPx, previewHeightPx,
+                        familyName, fontSizePreviewPx, highlightColor, style,
+                        beforeSlot, activeSlot, afterSlot);
+
+                try (FileOutputStream fos = new FileOutputStream(assFile)) {
+                    fos.write(assContent.getBytes("UTF-8"));
+                }
+
+                mainHandler.post(() -> callback.onProgress("Encoding video..."));
+
+                String command = String.format(
+                        "-y -i \"%s\" -vf \"subtitles='%s':fontsdir='%s'\" "
+                                + "-c:v h264_mediacodec -b:v 4M -c:a copy \"%s\"",
+                        tempInputVideo.getAbsolutePath(),
+                        assFile.getAbsolutePath().replace("'", "'\\''"),
+                        fontsDir.getAbsolutePath().replace("'", "'\\''"),
+                        outputVideo.getAbsolutePath());
+
+                FFmpegSession session = FFmpegKit.execute(command);
+
+                if (!ReturnCode.isSuccess(session.getReturnCode())) {
+                    String logs = session.getAllLogsAsString();
+                    throw new Exception(
+                            "ffmpeg rc=" + session.getReturnCode() + " logs: " + logs);
+                }
+
+                if (!outputVideo.exists() || outputVideo.length() == 0) {
+                    throw new Exception("ffmpeg reported success but output file is missing/empty");
+                }
+
+                mainHandler.post(() -> callback.onProgress("Saving to gallery..."));
+                Uri savedUri = saveToGallery(context, outputVideo);
+
+                mainHandler.post(() -> callback.onSuccess(savedUri));
+
+            } catch (Exception e) {
+                String message = e.getMessage() != null ? e.getMessage() : e.toString();
+                mainHandler.post(() -> callback.onError("Export failed: " + message));
+            } finally {
+                tempInputVideo.delete();
+                assFile.delete();
+                outputVideo.delete();
+                deleteRecursive(fontsDir);
+            }
+        }).start();
     }
-
-    new Thread(() -> {
-        // ... existing code ...
-
-        mainHandler.post(() -> callback.onProgress("Building captions..."));
-        String assContent = AssSubtitleBuilder.build(
-                captions, videoWidth, videoHeight,
-                previewWidthPx, previewHeightPx,
-                familyName, fontSizePreviewPx, highlightColor, style,   // CHANGED param name
-                beforeSlot, activeSlot, afterSlot);
-
-        // ... existing code ...
-    }).start();
-}
 
     private static void copyUriToFile(Context context, Uri uri, File dest) throws Exception {
         try (InputStream in = context.getContentResolver().openInputStream(uri);
