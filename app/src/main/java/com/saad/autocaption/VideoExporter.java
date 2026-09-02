@@ -35,8 +35,12 @@ public class VideoExporter {
             CaptionStyleOptions.FontOption fontOption,
             float fontSizeSp,
             int highlightColor,
-            int gravity,
             CaptionStyleOptions.CaptionStyleType style,
+            int previewWidthPx,
+            int previewHeightPx,
+            CaptionSlotTransform beforeSlot,
+            CaptionSlotTransform activeSlot,
+            CaptionSlotTransform afterSlot,
             ExportCallback callback) {
 
         Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -63,7 +67,9 @@ public class VideoExporter {
                 mainHandler.post(() -> callback.onProgress("Building captions..."));
                 String assContent = AssSubtitleBuilder.build(
                         captions, videoWidth, videoHeight,
-                        familyName, fontSizeSp, highlightColor, gravity, style);
+                        previewWidthPx, previewHeightPx,
+                        familyName, fontSizeSp, highlightColor, style,
+                        beforeSlot, activeSlot, afterSlot);
 
                 try (FileOutputStream fos = new FileOutputStream(assFile)) {
                     fos.write(assContent.getBytes("UTF-8"));
