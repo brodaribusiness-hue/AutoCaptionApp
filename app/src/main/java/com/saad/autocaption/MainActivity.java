@@ -58,9 +58,6 @@ public class MainActivity extends AppCompatActivity {
     private CaptionStyleOptions.FontOption selectedFontOption;
     private int selectedColor = 0xFFFFEB3B;
 
-    // NOTE: font size and position are no longer spinner-controlled —
-    // they'll become touch-drag/resize controls in a follow-up step.
-    // Fixed sensible defaults for now.
     private final float selectedFontSizeSp = 22f;
     private final int selectedGravity = Gravity.BOTTOM;
 
@@ -591,9 +588,6 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     }
 
-                    // CHANGED: only 3 words on screen at once —
-                    // 1 word before the active word, the active word,
-                    // 1 word after.
                     int wordsBefore = 1;
                     int wordsAfter = 1;
                     int startIdx = Math.max(0, anchorIndex - wordsBefore);
