@@ -32,15 +32,40 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
-            <TextView
-                android:id="@+id/captionText"
+            <FrameLayout
+                android:id="@+id/captionLayer"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:textColor="#FFFFFF"
-                android:textSize="22sp"
-                android:layout_gravity="bottom"
-                android:padding="12dp" />
+                android:layout_height="match_parent">
+
+                <TextView
+                    android:id="@+id/wordSlotBefore"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:textColor="#CCCCCC"
+                    android:textSize="22sp"
+                    android:padding="4dp" />
+
+                <TextView
+                    android:id="@+id/wordSlotActive"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"
+                    android:textSize="22sp"
+                    android:padding="4dp" />
+
+                <TextView
+                    android:id="@+id/wordSlotAfter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:textColor="#CCCCCC"
+                    android:textSize="22sp"
+                    android:padding="4dp" />
+
+            </FrameLayout>
 
         </com.saad.autocaption.AspectRatioFrameLayout>
 
