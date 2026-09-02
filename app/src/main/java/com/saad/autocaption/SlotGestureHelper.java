@@ -5,14 +5,16 @@ import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 
-/** Handles drag (1 finger) + pinch-to-zoom (2 fingers) for a single
- * caption word slot, so it can be moved and resized independently. */
 public class SlotGestureHelper implements View.OnTouchListener {
 
     private final ScaleGestureDetector scaleDetector;
     private float lastTouchX;
     private float lastTouchY;
     private float currentScale = 1f;
+
+    // NEW: tracks whether the user has manually dragged this slot's
+    // position — once true, auto-spacing stops touching translationX/Y.
+    private boolean positionDragged = false;
 
     public SlotGestureHelper(Context context) {
         scaleDetector = new ScaleGestureDetector(context,
@@ -44,6 +46,7 @@ public class SlotGestureHelper implements View.OnTouchListener {
                     view.setTranslationY(view.getTranslationY() + dy);
                     lastTouchX = event.getRawX();
                     lastTouchY = event.getRawY();
+                    positionDragged = true;
                 }
                 break;
         }
@@ -55,5 +58,10 @@ public class SlotGestureHelper implements View.OnTouchListener {
 
     public float getScale() {
         return currentScale;
+    }
+
+    // NEW
+    public boolean isPositionDragged() {
+        return positionDragged;
     }
 }
