@@ -92,7 +92,7 @@ public class MainActivity extends AppCompatActivity {
                 granted -> {
                     if (!granted) {
                         statusText.setText(
-                                "Storage permission denied.export may not work on this device");
+                                "Storage permission denied - export may not work on this device");
                     }
                 });
 
@@ -107,13 +107,12 @@ public class MainActivity extends AppCompatActivity {
         generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
         exportButton = (Button) findViewById(R.id.exportButton);
         playPauseButton = (Button) findViewById(R.id.playPauseButton);
-        playPauseButton.setEnabled(false);
-        Button selectVideoButton = (Button) findViewById(R.id.selectVideoButton);
-        generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
-        exportButton = (Button) findViewById(R.id.exportButton);
-        playPauseButton = (Button) findViewById(R.id.playPauseButton);
-        playPauseButton.setEnabled(false);
+        statusText = (TextView) findViewById(R.id.statusText);
+        fontStyleSpinner = (Spinner) findViewById(R.id.fontStyleSpinner);
+        captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
+        captionStyleSpinner = (Spinner) findViewById(R.id.captionStyleSpinner);
 
+        playPauseButton.setEnabled(false);
         playPauseButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -126,11 +125,7 @@ public class MainActivity extends AppCompatActivity {
                     playPauseButton.setText("Pause");
                 }
             }
-        });  
-        statusText = (TextView) findViewById(R.id.statusText);
-        fontStyleSpinner = (Spinner) findViewById(R.id.fontStyleSpinner);
-        captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
-        captionStyleSpinner = (Spinner) findViewById(R.id.captionStyleSpinner);
+        });
 
         wordSlotBefore.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         wordSlotActive.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
@@ -227,7 +222,7 @@ public class MainActivity extends AppCompatActivity {
                 int previewHeightPx = videoPreviewContainer.getHeight();
 
                 if (previewWidthPx <= 0 || previewHeightPx <= 0) {
-                    statusText.setText("Preview not ready yet.wait a moment and try again");
+                    statusText.setText("Preview not ready yet - wait a moment and try again");
                     return;
                 }
 
@@ -660,7 +655,7 @@ public class MainActivity extends AppCompatActivity {
             case GLOW_POP:
                 return 1.15f;
             case BOUNCE:
-                return 1.25f; // peak bounce scale — worst case, keeps gap safe
+                return 1.25f;
             default:
                 return 1f;
         }
@@ -786,7 +781,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // NEW: rotation-corrected aspect ratio so preview matches export's coordinate space.
     private void applyRotationCorrectedAspectRatio(Uri uri, int fallbackW, int fallbackH) {
         int width = fallbackW;
         int height = fallbackH;
@@ -807,11 +801,10 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         } catch (Exception ignored) {
-            // fall back to whatever mp.getVideoWidth/Height already gave us
-         } finally {
+        } finally {
             try {
                 retriever.release();
-            } catch (Exception ignored) {
+            } catch (Exception ignored2) {
             }
         }
         videoPreviewContainer.setAspectRatio(width, height);
