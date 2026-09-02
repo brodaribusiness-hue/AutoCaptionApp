@@ -70,6 +70,14 @@
         </com.saad.autocaption.AspectRatioFrameLayout>
 
         <Button
+            android:id="@+id/playPauseButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Pause"
+            android:enabled="false"
+            android:layout_marginTop="8dp" />
+
+        <Button
             android:id="@+id/selectVideoButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
