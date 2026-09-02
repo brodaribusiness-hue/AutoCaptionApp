@@ -91,7 +91,7 @@ public class MainActivity extends AppCompatActivity {
                 granted -> {
                     if (!granted) {
                         statusText.setText(
-                                "Storage permission denied — export may not work on this device");
+                                "Storage permission denied.export may not work on this device");
                     }
                 });
 
@@ -205,7 +205,7 @@ public class MainActivity extends AppCompatActivity {
                 int previewHeightPx = videoPreviewContainer.getHeight();
 
                 if (previewWidthPx <= 0 || previewHeightPx <= 0) {
-                    statusText.setText("Preview not ready yet — wait a moment and try again");
+                    statusText.setText("Preview not ready yet.wait a moment and try again");
                     return;
                 }
 
