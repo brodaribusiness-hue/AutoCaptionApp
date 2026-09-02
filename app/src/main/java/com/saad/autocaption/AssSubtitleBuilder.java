@@ -3,22 +3,21 @@ package com.saad.autocaption;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Builds a libass-compatible .ass subtitle file from the recognized
- * captions, using the same 4-5 word rolling window and per-word
- * highlight the on-screen preview uses.
- */
 public class AssSubtitleBuilder {
 
     public static String build(
             List<Caption> captions,
             int videoWidth,
             int videoHeight,
+            int previewWidthPx,
+            int previewHeightPx,
             String fontName,
             float fontSizeSp,
             int highlightColor,
-            int gravity,
-            CaptionStyleOptions.CaptionStyleType style) {
+            CaptionStyleOptions.CaptionStyleType style,
+            CaptionSlotTransform beforeSlot,
+            CaptionSlotTransform activeSlot,
+            CaptionSlotTransform afterSlot) {
 
         StringBuilder sb = new StringBuilder();
         sb.append("[Script Info]\nScriptType: v4.00+\nPlayResX: ")
@@ -27,18 +26,8 @@ public class AssSubtitleBuilder {
         float scaleFactor = videoWidth / 400f;
         int assFontSize = Math.round(fontSizeSp * scaleFactor);
 
-        int alignment = alignmentForGravity(gravity);
-        int marginV = Math.round(videoHeight * 0.06f);
-
-        String primaryColor = toAssColor(0xFFCCCCCC);
         String highlightAss = toAssColor(highlightColor);
         String outlineColor = toAssColor(0xFF000000);
-
-        // UPDATED: mapped to the new 8 style names.
-        int borderStyle = (style == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT
-                || style == CaptionStyleOptions.CaptionStyleType.KARAOKE_FLOW) ? 3 : 1;
-        int outlineWidth = (style == CaptionStyleOptions.CaptionStyleType.BOUNCE
-                || style == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH) ? 4 : 2;
 
         sb.append("[V4+ Styles]\n");
         sb.append("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
@@ -46,76 +35,78 @@ public class AssSubtitleBuilder {
                 + "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
                 + "Alignment, MarginL, MarginR, MarginV, Encoding\n");
         sb.append(String.format(Locale.US,
-                "Style: Default,%s,%d,%s,%s,%s,%s,0,0,0,0,100,100,0,0,%d,%d,0,%d,20,20,%d,1\n\n",
-                fontName, assFontSize, primaryColor, highlightAss, outlineColor,
-                outlineColor, borderStyle, outlineWidth, alignment, marginV));
+                "Style: Default,%s,%d,&HFFFFFF&,%s,%s,%s,0,0,0,0,100,100,0,0,1,2,0,2,20,20,20,1\n\n",
+                fontName, assFontSize, highlightAss, outlineColor, outlineColor));
 
         sb.append("[Events]\n");
         sb.append("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n");
 
-        int wordsBefore = 1;
-        int wordsAfter = 1;
+        // \pos overrides the bottom-center anchor with an exact pixel
+        // position, mapped from the preview's on-screen pixels into the
+        // exported video's own resolution.
+        float previewToVideoX = videoWidth / (float) Math.max(previewWidthPx, 1);
+        float previewToVideoY = videoHeight / (float) Math.max(previewHeightPx, 1);
 
-        for (int matched = 0; matched < captions.size(); matched++) {
-            Caption activeCap = captions.get(matched);
-            int startIdx = Math.max(0, matched - wordsBefore);
-            int endIdx = Math.min(captions.size() - 1, matched + wordsAfter);
+        int baseX = videoWidth / 2;
+        int baseY = videoHeight - Math.round(videoHeight * 0.06f);
 
-            StringBuilder line = new StringBuilder();
+        boolean oneWordPunch = style == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
 
-            // NEW: One Word Punch only shows the active word in export too.
-            if (style == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH) {
-                line.append(buildActiveWordTag(style, highlightAss))
-                        .append(activeCap.word).append("{\\r}");
-            } else {
-                for (int i = startIdx; i <= endIdx; i++) {
-                    Caption cap = captions.get(i);
-                    if (i == matched) {
-                        line.append(buildActiveWordTag(style, highlightAss))
-                                .append(cap.word).append("{\\r}");
-                    } else {
-                        line.append(cap.word);
-                    }
-                    if (i != endIdx) line.append(" ");
-                }
+        for (int i = 0; i < captions.size(); i++) {
+            Caption activeCap = captions.get(i);
+            String startTime = toAssTime(activeCap.startTime);
+            String endTime = toAssTime(activeCap.endTime);
+
+            if (!oneWordPunch && i - 1 >= 0) {
+                appendWordLine(sb, startTime, endTime, captions.get(i - 1).word,
+                        beforeSlot, baseX, baseY, previewToVideoX, previewToVideoY,
+                        "\\c&HFFFFFF&");
             }
 
-            sb.append("Dialogue: 0,")
-                    .append(toAssTime(activeCap.startTime)).append(",")
-                    .append(toAssTime(activeCap.endTime)).append(",")
-                    .append("Default,,0,0,0,,").append(line).append("\n");
+            String activeColorTag = buildActiveWordColorTag(style, highlightAss);
+            appendWordLine(sb, startTime, endTime, activeCap.word,
+                    activeSlot, baseX, baseY, previewToVideoX, previewToVideoY,
+                    activeColorTag);
+
+            if (!oneWordPunch && i + 1 < captions.size()) {
+                appendWordLine(sb, startTime, endTime, captions.get(i + 1).word,
+                        afterSlot, baseX, baseY, previewToVideoX, previewToVideoY,
+                        "\\c&HFFFFFF&");
+            }
         }
 
         return sb.toString();
     }
 
-    // UPDATED: mapped to the new 8 style names.
-    private static String buildActiveWordTag(
-            CaptionStyleOptions.CaptionStyleType style, String highlightAss) {
-        switch (style) {
-            case ONE_WORD_PUNCH:
-                return "{\\fscx180\\fscy180\\c" + highlightAss + "}";
-            case KARAOKE_FLOW:
-            case BOX_HIGHLIGHT:
-                return "{\\c" + highlightAss + "}";
-            case BOUNCE:
-                return "{\\fscx125\\fscy125\\c" + highlightAss + "}";
-            case GLOW_POP:
-                return "{\\fscx125\\fscy125\\c" + highlightAss + "\\blur4}";
-            case GREEN_EMPHASIS:
-                return "{\\c&H0000FF00&}"; // solid green
-            case MINIMAL_CLEAN:
-                return "{\\c&HFFFFFF&}"; // solid white, no emphasis
-            case HIGHLIGHT_POP:
-            default:
-                return "{\\c" + highlightAss + "}";
-        }
+    private static void appendWordLine(
+            StringBuilder sb, String startTime, String endTime, String word,
+            CaptionSlotTransform slot, int baseX, int baseY,
+            float previewToVideoX, float previewToVideoY, String colorTag) {
+
+        int posX = baseX + Math.round(slot.translationX * previewToVideoX);
+        int posY = baseY + Math.round(slot.translationY * previewToVideoY);
+        int scalePercent = Math.round(slot.scale * 100);
+
+        sb.append("Dialogue: 0,").append(startTime).append(",").append(endTime)
+                .append(",Default,,0,0,0,,")
+                .append("{\\pos(").append(posX).append(",").append(posY).append(")")
+                .append("\\fscx").append(scalePercent).append("\\fscy").append(scalePercent)
+                .append(colorTag).append("}")
+                .append(word).append("\n");
     }
 
-    private static int alignmentForGravity(int gravity) {
-        if (gravity == android.view.Gravity.TOP) return 8;
-        if (gravity == android.view.Gravity.CENTER_VERTICAL) return 5;
-        return 2; // bottom
+    private static String buildActiveWordColorTag(
+            CaptionStyleOptions.CaptionStyleType style, String highlightAss) {
+        switch (style) {
+            case GREEN_EMPHASIS:
+                return "\\c&H0000FF00&";
+            case MINIMAL_CLEAN:
+                return "\\c&HFFFFFF&";
+            case GLOW_POP:
+                return "\\c" + highlightAss + "\\blur4";
+            default:
+                return "\\c" + highlightAss;
+        }
     }
 
     private static String toAssColor(int argb) {
