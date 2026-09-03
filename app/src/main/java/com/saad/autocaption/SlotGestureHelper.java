@@ -37,6 +37,11 @@ public class SlotGestureHelper implements View.OnTouchListener {
             case MotionEvent.ACTION_DOWN:
                 lastTouchX = event.getRawX();
                 lastTouchY = event.getRawY();
+                // FIX: the root layout is a ScrollView. Without this,
+                // ScrollView steals touch events mid-gesture for its own
+                // vertical scroll, which is what made dragging feel
+                // laggy/interrupted instead of smooth.
+                requestParentDisallowIntercept(view, true);
                 break;
 
             case MotionEvent.ACTION_MOVE:
@@ -47,10 +52,6 @@ public class SlotGestureHelper implements View.OnTouchListener {
                     float newX = view.getTranslationX() + dx;
                     float newY = view.getTranslationY() + dy;
 
-                    // Boundary clamp against parent bounds so the slot
-                    // can never be dragged fully off-screen. Computed
-                    // against the view's laid-out position + current
-                    // pinch scale, so clamping stays correct at any zoom.
                     if (view.getParent() instanceof ViewGroup) {
                         ViewGroup parent = (ViewGroup) view.getParent();
                         int parentWidth = parent.getWidth();
@@ -67,8 +68,6 @@ public class SlotGestureHelper implements View.OnTouchListener {
                             float minY = -centerY + halfH;
                             float maxY = parentHeight - centerY - halfH;
 
-                            // Guard against inverted ranges (view bigger
-                            // than parent) so it doesn't get stuck at 0.
                             if (minX <= maxX) {
                                 newX = Math.max(minX, Math.min(newX, maxX));
                             }
@@ -84,6 +83,12 @@ public class SlotGestureHelper implements View.OnTouchListener {
                     lastTouchY = event.getRawY();
                     positionDragged = true;
                 }
+                requestParentDisallowIntercept(view, true);
+                break;
+
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                requestParentDisallowIntercept(view, false);
                 break;
 
             default:
@@ -93,6 +98,12 @@ public class SlotGestureHelper implements View.OnTouchListener {
         view.setScaleX(currentScale);
         view.setScaleY(currentScale);
         return true;
+    }
+
+    private void requestParentDisallowIntercept(View view, boolean disallow) {
+        if (view.getParent() != null) {
+            view.getParent().requestDisallowInterceptTouchEvent(disallow);
+        }
     }
 
     public float getScale() {
