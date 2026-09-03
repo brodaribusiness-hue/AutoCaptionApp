@@ -51,6 +51,7 @@ public class MainActivity extends AppCompatActivity {
     private View highlightBoxView;
     private Button generateCaptionsButton;
     private Button exportButton;
+    private Button playPauseButton;
     private Spinner fontStyleSpinner;
     private Spinner captionColorSpinner;
     private Spinner captionStyleSpinner;
@@ -76,9 +77,6 @@ public class MainActivity extends AppCompatActivity {
     private final AtomicInteger requestIdGenerator = new AtomicInteger(0);
     private volatile int currentRequestId = 0;
 
-    // Tracks which caption index is currently shown, so the sync loop
-    // only touches views on a genuine word change (no flicker, and lets
-    // per-word transition animations run exactly once per word).
     private int lastAnchorIndex = -1;
     private ValueAnimator boxSlideAnimator;
 
@@ -117,17 +115,12 @@ public class MainActivity extends AppCompatActivity {
         Button selectVideoButton = (Button) findViewById(R.id.selectVideoButton);
         generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
         exportButton = (Button) findViewById(R.id.exportButton);
+        playPauseButton = (Button) findViewById(R.id.playPauseButton);
         statusText = (TextView) findViewById(R.id.statusText);
         fontStyleSpinner = (Spinner) findViewById(R.id.fontStyleSpinner);
         captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
         captionStyleSpinner = (Spinner) findViewById(R.id.captionStyleSpinner);
 
-        // Only GLOW_POP's BlurMaskFilter needs a software layer. Forcing
-        // it on every slot baked text into a bitmap that then got
-        // stretched by pinch-zoom scale — that's what was blurring text
-        // and washing out color-only style differences (Highlight Pop,
-        // Green Emphasis, Karaoke Flow, Box Highlight all looked "broken"
-        // because the blur made their color/shape differences invisible).
         wordSlotBefore.setLayerType(View.LAYER_TYPE_NONE, null);
         wordSlotActive.setLayerType(View.LAYER_TYPE_NONE, null);
         wordSlotAfter.setLayerType(View.LAYER_TYPE_NONE, null);
@@ -158,6 +151,7 @@ public class MainActivity extends AppCompatActivity {
 
         generateCaptionsButton.setEnabled(false);
         exportButton.setEnabled(false);
+        playPauseButton.setEnabled(false);
 
         setupFontSpinner();
         setupColorSpinner();
@@ -177,11 +171,6 @@ public class MainActivity extends AppCompatActivity {
                 if (videoUri != null) {
                     playVideo(videoUri);
                 }
-                // FIX: caption loop previously died in surfaceDestroyed()
-                // whenever the app backgrounded, and was never restarted
-                // here — captions froze permanently until the user
-                // regenerated them. Now every surface (re)creation
-                // re-attaches the sync clock, no regeneration needed.
                 resyncCaptionEngineIfNeeded();
             }
 
@@ -223,6 +212,31 @@ public class MainActivity extends AppCompatActivity {
                     wordSlotAfter.setText("");
                     highlightBoxView.setAlpha(0f);
                     extractAudio(videoUri, requestId);
+                }
+            }
+        });
+
+        // NEW: Play/Pause button. Toggles MediaPlayer state; the caption
+        // sync loop already checks mediaPlayer.isPlaying() each tick, so
+        // pausing playback automatically freezes captions in place —
+        // no separate pause logic needed for the sync engine itself.
+        playPauseButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mediaPlayer == null) {
+                    return;
+                }
+                try {
+                    if (mediaPlayer.isPlaying()) {
+                        mediaPlayer.pause();
+                        playPauseButton.setText("▶");
+                    } else {
+                        mediaPlayer.start();
+                        playPauseButton.setText("II");
+                        resyncCaptionEngineIfNeeded();
+                    }
+                } catch (IllegalStateException ignored) {
+                    // MediaPlayer not in a valid state (e.g. still preparing) — ignore tap.
                 }
             }
         });
@@ -370,9 +384,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 selectedStyle = styles[position].type;
-                // Style changed — hide any stale box highlight and force
-                // a fresh render of the currently active word so the new
-                // style's colors/effects apply immediately.
                 highlightBoxView.animate().cancel();
                 highlightBoxView.setAlpha(0f);
                 lastAnchorIndex = -1;
@@ -384,10 +395,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // Creates the shared sliding background box used by BOX_HIGHLIGHT.
-    // A single persistent View is animated between words instead of
-    // being recreated per-word, which is what makes the transition a
-    // smooth slide instead of a pop/flicker.
     private void setupHighlightBoxView() {
         FrameLayout captionLayer = findViewById(R.id.captionLayer);
 
@@ -403,8 +410,6 @@ public class MainActivity extends AppCompatActivity {
                 FrameLayout.LayoutParams.WRAP_CONTENT);
         boxParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
 
-        // Index 0 so it draws behind wordSlotBefore/Active/After, which
-        // are added to the same FrameLayout in the XML layout.
         captionLayer.addView(highlightBoxView, 0, boxParams);
     }
 
@@ -451,6 +456,8 @@ public class MainActivity extends AppCompatActivity {
         wordSlotAfter.setText("");
         highlightBoxView.setAlpha(0f);
         exportButton.setEnabled(false);
+        playPauseButton.setEnabled(true);
+        playPauseButton.setText("II");
 
         playVideo(videoUri);
 
@@ -605,18 +612,32 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    // Only GREEN_EMPHASIS, KARAOKE_FLOW, BOUNCE, ONE_WORD_PUNCH and
-    // GLOW_POP use a plain span for their active-word color/effect.
-    // HIGHLIGHT_POP, GREEN_EMPHASIS and BOX_HIGHLIGHT are drawn with a
-    // stroked OutlineSpan instead (see applySlotStyle) for sharp,
-    // high-contrast edges against any video background.
+    // Simplified to reliable built-in spans per style — every style now
+    // produces a visibly distinct, guaranteed-rendering result:
+    //   HIGHLIGHT_POP  -> solid orange + View-level scale pop animation
+    //   GREEN_EMPHASIS -> solid neon green
+    //   KARAOKE_FLOW   -> full-height color block behind the word
+    //   BOX_HIGHLIGHT  -> white text over the sliding shared box view
+    //   BOUNCE         -> pulsing size (span)
+    //   ONE_WORD_PUNCH -> enlarged size (span)
+    //   GLOW_POP       -> blurred halo + sharp text (span)
+    //   MINIMAL_CLEAN  -> plain white bold
     private Object buildActiveWordSpan() {
         switch (selectedStyle) {
+            case HIGHLIGHT_POP:
+                return new android.text.style.ForegroundColorSpan(0xFFFF9800);
+
+            case GREEN_EMPHASIS:
+                return new android.text.style.ForegroundColorSpan(0xFF39FF14);
+
             case KARAOKE_FLOW:
-                return new KaraokeFillSpan(0xFF000000, selectedColor, 10f);
+                return new KaraokeFillSpan(0xFF000000, selectedColor, 14f);
+
+            case BOX_HIGHLIGHT:
+                return new android.text.style.ForegroundColorSpan(0xFFFFFFFF);
 
             case ONE_WORD_PUNCH:
-                return new PopScaleSpan(selectedColor, 1.8f);
+                return new PopScaleSpan(selectedColor, 1.6f);
 
             case BOUNCE:
                 return new BounceSpan(selectedColor);
@@ -625,8 +646,30 @@ public class MainActivity extends AppCompatActivity {
                 int glowColor = (selectedColor & 0x00FFFFFF) | 0x80000000;
                 return new GlowPopSpan(selectedColor, glowColor, 1.15f, 5f);
 
+            case MINIMAL_CLEAN:
             default:
                 return null;
+        }
+    }
+
+    // Max visual scale each active-word span can render at. Used to
+    // reserve enough horizontal space in autoSpaceSlots() so an
+    // enlarged active word never overlaps/hides the before/after
+    // words — this was the actual cause of Bounce/Glow Pop appearing
+    // to show "only one word": spacing was computed from the plain,
+    // unscaled text width and didn't account for the span's growth.
+    private float activeStyleMaxScale() {
+        switch (selectedStyle) {
+            case BOUNCE:
+                return 1.25f;
+            case ONE_WORD_PUNCH:
+                return 1.6f;
+            case GLOW_POP:
+                return 1.15f;
+            case HIGHLIGHT_POP:
+                return 1.15f; // View-level pop animation, brief overlap only
+            default:
+                return 1.0f;
         }
     }
 
@@ -641,16 +684,18 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Only GLOW_POP's BlurMaskFilter requires a software layer. Every
-    // other style stays hardware-accelerated (LAYER_TYPE_NONE) so text
-    // is redrawn crisply at the current pinch-zoom scale instead of
-    // stretching a cached bitmap, which was the source of the blur.
     private void applyLayerTypeForStyle(TextView slot, boolean isActive) {
         boolean needsSoftwareLayer =
                 isActive && selectedStyle == CaptionStyleOptions.CaptionStyleType.GLOW_POP;
         int desired = needsSoftwareLayer ? View.LAYER_TYPE_SOFTWARE : View.LAYER_TYPE_NONE;
         if (slot.getLayerType() != desired) {
             slot.setLayerType(desired, null);
+            // FIX: force an immediate invalidate so the BlurMaskFilter in
+            // GlowPopSpan is guaranteed to draw through a software layer
+            // on the very next frame, instead of possibly rendering once
+            // more through the stale hardware layer (which silently drops
+            // the blur, making Glow Pop look like it "doesn't glow").
+            slot.invalidate();
         }
     }
 
@@ -662,10 +707,6 @@ public class MainActivity extends AppCompatActivity {
 
         applyLayerTypeForStyle(slot, isActive);
 
-        // Strong shadow on the TextView's own Paint. Spans draw using
-        // this same Paint, so the shadow applies under every style —
-        // including custom ReplacementSpans — giving sharp separation
-        // from busy video backgrounds instead of a washed-out look.
         slot.setShadowLayer(6f, 0f, 2f, 0xFF000000);
 
         if (selectedStyle == CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN) {
@@ -685,27 +726,9 @@ public class MainActivity extends AppCompatActivity {
         }
 
         android.text.SpannableString spannable = new android.text.SpannableString(word);
-
-        boolean needsOutlineBase =
-                selectedStyle == CaptionStyleOptions.CaptionStyleType.HIGHLIGHT_POP
-                || selectedStyle == CaptionStyleOptions.CaptionStyleType.GREEN_EMPHASIS
-                || selectedStyle == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
-
-        if (needsOutlineBase) {
-            int fillColor;
-            if (selectedStyle == CaptionStyleOptions.CaptionStyleType.GREEN_EMPHASIS) {
-                fillColor = 0xFF39FF14; // vibrant neon green, not the old dull Material green
-            } else if (selectedStyle == CaptionStyleOptions.CaptionStyleType.HIGHLIGHT_POP) {
-                fillColor = 0xFFFF9800;
-            } else {
-                fillColor = 0xFFFFFFFF; // BOX_HIGHLIGHT: white text on the sliding dark box
-            }
-            spannable.setSpan(new OutlineSpan(fillColor, 0xFF000000, 4f), 0, word.length(), 0);
-        } else {
-            Object span = buildActiveWordSpan();
-            if (span != null) {
-                spannable.setSpan(span, 0, word.length(), 0);
-            }
+        Object span = buildActiveWordSpan();
+        if (span != null) {
+            spannable.setSpan(span, 0, word.length(), 0);
         }
 
         boolean skipBold = selectedStyle == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT
@@ -723,14 +746,14 @@ public class MainActivity extends AppCompatActivity {
                 + slot.getPaddingLeft() + slot.getPaddingRight();
     }
 
-    // Places before/active/after slots side-by-side based on their
-    // actual measured width, with a small fixed gap — only for slots
-    // the user hasn't manually dragged. Prevents overlap on long words
-    // and excess empty gap on short words.
     private void autoSpaceSlots() {
         float gap = dpToPx(8);
 
-        float activeWidth = measureSlotWidth(wordSlotActive);
+        // FIX: reserve extra room for the active word's real render-time
+        // size, not just its plain measured text width, so styles that
+        // visually enlarge the active word (Bounce, One Word Punch, Glow
+        // Pop, Highlight Pop) don't overlap and hide the before/after words.
+        float activeWidth = measureSlotWidth(wordSlotActive) * activeStyleMaxScale();
 
         if (!activeSlotGesture.isPositionDragged()) {
             wordSlotActive.setTranslationX(0f);
@@ -747,11 +770,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Fires once per genuine word change (never on the 33ms poll tick
-    // itself). Drives the Highlight Pop scale-spring and the Box
-    // Highlight sliding background — a single persistent View animated
-    // to the new word's position, not recreated per word, so the
-    // transition is a real slide with no flicker.
     private void playActiveWordTransition() {
         if (selectedStyle == CaptionStyleOptions.CaptionStyleType.HIGHLIGHT_POP) {
             wordSlotActive.animate().cancel();
@@ -776,9 +794,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // Measures the active slot on the next layout pass (its text/width
-    // just changed) and animates the shared box View to that position
-    // and size — a shared-element-style slide between words.
     private void slideHighlightBoxTo(TextView target) {
         target.post(() -> {
             int widthPx = target.getWidth() + (int) dpToPx(8);
@@ -816,14 +831,10 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // Single resync entry point. Called on process resume and on every
-    // surface (re)creation — i.e. whenever the app was backgrounded and
-    // is coming back. Only re-attaches the polling clock to the current
-    // MediaPlayer position; never touches or regenerates `captions`.
     private void resyncCaptionEngineIfNeeded() {
         if (captions != null && !captions.isEmpty()) {
             stopCaptionUpdates();
-            lastAnchorIndex = -1; // forces exactly one clean re-render, no flicker
+            lastAnchorIndex = -1;
             startCaptionUpdates();
         }
     }
@@ -872,10 +883,6 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
 
-                    // Only touch views when the active word actually
-                    // changes. Re-running setText()/spans every tick on
-                    // unchanged text is what caused visible flicker and
-                    // blocked a clean per-word transition animation.
                     if (anchorIndex != lastAnchorIndex) {
                         lastAnchorIndex = anchorIndex;
 
@@ -896,8 +903,6 @@ public class MainActivity extends AppCompatActivity {
                         playActiveWordTransition();
                     }
                 }
-                // ~30fps sampling — tight enough for word-boundary snapping
-                // without adding meaningful CPU cost over the old 100ms tick.
                 captionUpdateHandler.postDelayed(this, 33);
             }
         };
@@ -931,6 +936,8 @@ public class MainActivity extends AppCompatActivity {
                     }
                     mp.setLooping(true);
                     mp.start();
+                    playPauseButton.setEnabled(true);
+                    playPauseButton.setText("II");
                     resyncCaptionEngineIfNeeded();
                 }
             });
