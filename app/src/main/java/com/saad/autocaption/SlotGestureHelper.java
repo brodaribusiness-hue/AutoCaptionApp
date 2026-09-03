@@ -4,6 +4,7 @@ import android.content.Context;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.ViewGroup;
 
 public class SlotGestureHelper implements View.OnTouchListener {
 
@@ -12,7 +13,7 @@ public class SlotGestureHelper implements View.OnTouchListener {
     private float lastTouchY;
     private float currentScale = 1f;
 
-    // NEW: tracks whether the user has manually dragged this slot's
+    // Tracks whether the user has manually dragged this slot's
     // position — once true, auto-spacing stops touching translationX/Y.
     private boolean positionDragged = false;
 
@@ -42,12 +43,50 @@ public class SlotGestureHelper implements View.OnTouchListener {
                 if (event.getPointerCount() == 1 && !scaleDetector.isInProgress()) {
                     float dx = event.getRawX() - lastTouchX;
                     float dy = event.getRawY() - lastTouchY;
-                    view.setTranslationX(view.getTranslationX() + dx);
-                    view.setTranslationY(view.getTranslationY() + dy);
+
+                    float newX = view.getTranslationX() + dx;
+                    float newY = view.getTranslationY() + dy;
+
+                    // Boundary clamp against parent bounds so the slot
+                    // can never be dragged fully off-screen. Computed
+                    // against the view's laid-out position + current
+                    // pinch scale, so clamping stays correct at any zoom.
+                    if (view.getParent() instanceof ViewGroup) {
+                        ViewGroup parent = (ViewGroup) view.getParent();
+                        int parentWidth = parent.getWidth();
+                        int parentHeight = parent.getHeight();
+
+                        if (parentWidth > 0 && parentHeight > 0) {
+                            float halfW = (view.getWidth() * currentScale) / 2f;
+                            float halfH = (view.getHeight() * currentScale) / 2f;
+                            float centerX = view.getLeft() + view.getWidth() / 2f;
+                            float centerY = view.getTop() + view.getHeight() / 2f;
+
+                            float minX = -centerX + halfW;
+                            float maxX = parentWidth - centerX - halfW;
+                            float minY = -centerY + halfH;
+                            float maxY = parentHeight - centerY - halfH;
+
+                            // Guard against inverted ranges (view bigger
+                            // than parent) so it doesn't get stuck at 0.
+                            if (minX <= maxX) {
+                                newX = Math.max(minX, Math.min(newX, maxX));
+                            }
+                            if (minY <= maxY) {
+                                newY = Math.max(minY, Math.min(newY, maxY));
+                            }
+                        }
+                    }
+
+                    view.setTranslationX(newX);
+                    view.setTranslationY(newY);
                     lastTouchX = event.getRawX();
                     lastTouchY = event.getRawY();
                     positionDragged = true;
                 }
+                break;
+
+            default:
                 break;
         }
 
@@ -60,7 +99,6 @@ public class SlotGestureHelper implements View.OnTouchListener {
         return currentScale;
     }
 
-    // NEW
     public boolean isPositionDragged() {
         return positionDragged;
     }
