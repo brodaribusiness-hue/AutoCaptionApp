@@ -67,15 +67,22 @@
 
             </FrameLayout>
 
-        </com.saad.autocaption.AspectRatioFrameLayout>
+            <!-- NEW: Play/Pause overlay button, bottom-start corner of the
+                 video so it never sits on top of the caption slots. -->
+            <Button
+                android:id="@+id/playPauseButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:layout_gravity="bottom|start"
+                android:layout_margin="8dp"
+                android:text="II"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:background="#AA000000"
+                android:insetTop="0dp"
+                android:insetBottom="0dp" />
 
-        <Button
-            android:id="@+id/playPauseButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Pause"
-            android:enabled="false"
-            android:layout_marginTop="8dp" />
+        </com.saad.autocaption.AspectRatioFrameLayout>
 
         <Button
             android:id="@+id/selectVideoButton"
