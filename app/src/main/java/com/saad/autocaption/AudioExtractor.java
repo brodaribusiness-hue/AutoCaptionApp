@@ -1,12 +1,14 @@
 package com.saad.autocaption;
 
+import android.content.Context;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.net.Uri;
-import android.content.Context;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 import java.util.UUID;
@@ -26,9 +28,6 @@ public class AudioExtractor {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                // FIX: unique per-call file names so two overlapping
-                // extractions (e.g. user switches video quickly) never
-                // write into the same file and corrupt each other.
                 String uniqueId = UUID.randomUUID().toString();
                 File outputFile = new File(
                         context.getCacheDir(),
@@ -98,26 +97,23 @@ public class AudioExtractor {
             boolean sawInputEOS = false;
             boolean sawOutputEOS = false;
 
-            MediaCodec finalDecoder = decoder;
-            FileOutputStream finalPcmOutput = pcmOutput;
-
             while (!sawOutputEOS) {
 
                 if (!sawInputEOS) {
-                    int inputBufferIndex = finalDecoder.dequeueInputBuffer(10000);
+                    int inputBufferIndex = decoder.dequeueInputBuffer(10000);
                     if (inputBufferIndex >= 0) {
-                        ByteBuffer inputBuffer = finalDecoder.getInputBuffer(inputBufferIndex);
+                        ByteBuffer inputBuffer = decoder.getInputBuffer(inputBufferIndex);
 
                         int sampleSize = extractor.readSampleData(inputBuffer, 0);
 
                         if (sampleSize < 0) {
-                            finalDecoder.queueInputBuffer(
+                            decoder.queueInputBuffer(
                                     inputBufferIndex, 0, 0, 0,
                                     MediaCodec.BUFFER_FLAG_END_OF_STREAM);
                             sawInputEOS = true;
                         } else {
                             long presentationTime = extractor.getSampleTime();
-                            finalDecoder.queueInputBuffer(
+                            decoder.queueInputBuffer(
                                     inputBufferIndex, 0, sampleSize,
                                     presentationTime, 0);
                             extractor.advance();
@@ -125,24 +121,19 @@ public class AudioExtractor {
                     }
                 }
 
-                int outputBufferIndex = finalDecoder.dequeueOutputBuffer(bufferInfo, 10000);
+                int outputBufferIndex = decoder.dequeueOutputBuffer(bufferInfo, 10000);
 
                 if (outputBufferIndex == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
-                    // This is the authoritative format of the PCM data the
-                    // decoder will actually produce.
-                    MediaFormat outputFormat = finalDecoder.getOutputFormat();
+                    MediaFormat outputFormat = decoder.getOutputFormat();
                     sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE);
                     channelCount = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
 
                 } else if (outputBufferIndex >= 0) {
-
-                    ByteBuffer outputBuffer = finalDecoder.getOutputBuffer(outputBufferIndex);
-
+                    ByteBuffer outputBuffer = decoder.getOutputBuffer(outputBufferIndex);
                     byte[] data = new byte[bufferInfo.size];
                     outputBuffer.get(data);
-                    finalPcmOutput.write(data);
-
-                    finalDecoder.releaseOutputBuffer(outputBufferIndex, false);
+                    pcmOutput.write(data);
+                    decoder.releaseOutputBuffer(outputBufferIndex, false);
 
                     if ((bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                         sawOutputEOS = true;
@@ -151,14 +142,11 @@ public class AudioExtractor {
             }
 
             pcmOutput.close();
-            pcmOutput = null; // already closed — avoid double-close in finally
+            pcmOutput = null;
 
             writeWavFile(tempPcm, outputFile, sampleRate, channelCount);
 
         } finally {
-            // FIX: always release native decoder/extractor resources, even
-            // if an exception was thrown mid-decode (disk full, corrupt
-            // stream, etc). Previously these leaked on any error path.
             if (pcmOutput != null) {
                 try { pcmOutput.close(); } catch (Exception ignored) {}
             }
@@ -173,71 +161,66 @@ public class AudioExtractor {
     private static void writeWavFile(
             File pcmFile,
             File wavFile,
-            int sampleRate,
-            int channels) throws Exception {
+            int srcSampleRate,
+            int srcChannels) throws Exception {
 
-        int outputChannels = 1; // we always output mono
+        int targetSampleRate = 16000;
+        int targetChannels = 1;
 
-        if (channels == 2) {
-            File monoFile = new File(pcmFile.getParentFile(), pcmFile.getName() + ".mono.raw");
+        File processedPcm = new File(pcmFile.getParentFile(), pcmFile.getName() + ".16k.raw");
 
-            try (java.io.FileInputStream in = new java.io.FileInputStream(pcmFile);
-                 FileOutputStream monoOut = new FileOutputStream(monoFile)) {
+        try (FileInputStream in = new FileInputStream(pcmFile);
+             FileOutputStream out = new FileOutputStream(processedPcm)) {
 
-                byte[] buffer = new byte[4096];
-                int bytesRead;
-                byte[] leftover = null;
+            byte[] inBuffer = new byte[4096];
+            int bytesRead;
+            double resampleRatio = (double) srcSampleRate / targetSampleRate;
 
-                while ((bytesRead = in.read(buffer)) != -1) {
-                    byte[] chunk = buffer;
-                    int len = bytesRead;
+            ByteArrayOutputStream rawStream = new ByteArrayOutputStream();
+            while ((bytesRead = in.read(inBuffer)) != -1) {
+                rawStream.write(inBuffer, 0, bytesRead);
+            }
 
-                    if (leftover != null) {
-                        byte[] combined = new byte[leftover.length + len];
-                        System.arraycopy(leftover, 0, combined, 0, leftover.length);
-                        System.arraycopy(buffer, 0, combined, leftover.length, len);
-                        chunk = combined;
-                        len = combined.length;
-                        leftover = null;
-                    }
+            byte[] allPcm = rawStream.toByteArray();
+            int totalSourceSamples = allPcm.length / (2 * srcChannels);
+            int totalTargetSamples = (int) (totalSourceSamples / resampleRatio);
 
-                    int usableLen = len - (len % 4);
-                    if (usableLen < len) {
-                        leftover = new byte[len - usableLen];
-                        System.arraycopy(chunk, usableLen, leftover, 0, leftover.length);
-                    }
+            byte[] outBuffer = new byte[totalTargetSamples * 2];
+            int outOffset = 0;
 
-                    byte[] monoChunk = new byte[usableLen / 2];
-                    int monoIndex = 0;
+            for (int i = 0; i < totalTargetSamples; i++) {
+                int srcIndex = (int) (i * resampleRatio);
+                if (srcIndex >= totalSourceSamples) break;
 
-                    for (int i = 0; i < usableLen; i += 4) {
-                        short left = (short) ((chunk[i] & 0xff) | (chunk[i + 1] << 8));
-                        short right = (short) ((chunk[i + 2] & 0xff) | (chunk[i + 3] << 8));
-                        short mono = (short) ((left + right) / 2);
+                int sampleOffset = srcIndex * 2 * srcChannels;
+                short monoSample;
 
-                        monoChunk[monoIndex++] = (byte) (mono & 0xff);
-                        monoChunk[monoIndex++] = (byte) ((mono >> 8) & 0xff);
-                    }
-
-                    monoOut.write(monoChunk, 0, monoIndex);
+                if (srcChannels == 2 && (sampleOffset + 3) < allPcm.length) {
+                    short left = (short) ((allPcm[sampleOffset] & 0xFF) | (allPcm[sampleOffset + 1] << 8));
+                    short right = (short) ((allPcm[sampleOffset + 2] & 0xFF) | (allPcm[sampleOffset + 3] << 8));
+                    monoSample = (short) ((left + right) / 2);
+                } else if ((sampleOffset + 1) < allPcm.length) {
+                    monoSample = (short) ((allPcm[sampleOffset] & 0xFF) | (allPcm[sampleOffset + 1] << 8));
+                } else {
+                    monoSample = 0;
                 }
+
+                outBuffer[outOffset++] = (byte) (monoSample & 0xFF);
+                outBuffer[outOffset++] = (byte) ((monoSample >> 8) & 0xFF);
             }
 
-            try (java.io.FileInputStream in = new java.io.FileInputStream(monoFile)) {
-                writeHeaderAndCopy(in, wavFile, sampleRate, outputChannels, monoFile.length());
-            } finally {
-                monoFile.delete();
-            }
+            out.write(outBuffer, 0, outOffset);
+        }
 
-        } else {
-            try (java.io.FileInputStream in = new java.io.FileInputStream(pcmFile)) {
-                writeHeaderAndCopy(in, wavFile, sampleRate, outputChannels, pcmFile.length());
-            }
+        try (FileInputStream finalIn = new FileInputStream(processedPcm)) {
+            writeHeaderAndCopy(finalIn, wavFile, targetSampleRate, targetChannels, processedPcm.length());
+        } finally {
+            processedPcm.delete();
         }
     }
 
     private static void writeHeaderAndCopy(
-            java.io.FileInputStream in,
+            FileInputStream in,
             File wavFile,
             int sampleRate,
             int channels,
@@ -246,9 +229,7 @@ public class AudioExtractor {
         long totalSize = pcmSize + 36;
 
         try (FileOutputStream out = new FileOutputStream(wavFile)) {
-
             int byteRate = sampleRate * channels * 2;
-
             byte[] header = new byte[44];
 
             header[0] = 'R'; header[1] = 'I'; header[2] = 'F'; header[3] = 'F';
