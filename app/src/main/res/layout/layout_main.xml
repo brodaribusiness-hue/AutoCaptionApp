@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#121212">
+    android:background="#121212"
+    android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -11,20 +11,11 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Auto Caption"
-            android:textSize="26sp"
-            android:textStyle="bold"
-            android:textColor="#FFFFFF"
-            android:gravity="center"
-            android:layout_marginBottom="16dp" />
-
         <com.saad.autocaption.AspectRatioFrameLayout
             android:id="@+id/videoPreviewContainer"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="320dp"
+            android:layout_gravity="center_horizontal"
             android:background="#000000">
 
             <SurfaceView
@@ -32,10 +23,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
-            <FrameLayout
-                android:id="@+id/captionLayer"
+            <LinearLayout
+                android:id="@+id/captionsOverlayLayout"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:gravity="center"
+                android:orientation="horizontal"
                 android:clipChildren="false"
                 android:clipToPadding="false">
 
@@ -43,35 +37,29 @@
                     android:id="@+id/wordSlotBefore"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|center_horizontal"
+                    android:padding="4dp"
                     android:textColor="#CCCCCC"
-                    android:textSize="22sp"
-                    android:padding="4dp" />
+                    android:textSize="22sp" />
 
                 <TextView
                     android:id="@+id/wordSlotActive"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|center_horizontal"
-                    android:textColor="#FFFFFF"
-                    android:textStyle="bold"
-                    android:textSize="22sp"
-                    android:padding="6dp" />
+                    android:padding="4dp"
+                    android:textColor="#FFFF00"
+                    android:textSize="22sp" />
 
                 <TextView
                     android:id="@+id/wordSlotAfter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_gravity="bottom|center_horizontal"
+                    android:padding="4dp"
                     android:textColor="#CCCCCC"
-                    android:textSize="22sp"
-                    android:padding="4dp" />
-
-            </FrameLayout>
-
+                    android:textSize="22sp" />
+            </LinearLayout>
         </com.saad.autocaption.AspectRatioFrameLayout>
 
-        <!-- Player Controls Bar -->
+        <!-- Player Controls -->
         <LinearLayout
             android:id="@+id/playerControlLayout"
             android:layout_width="match_parent"
@@ -85,7 +73,7 @@
             <Button
                 android:id="@+id/playPauseButton"
                 android:layout_width="wrap_content"
-                android:layout_height="38dp"
+                android:layout_height="wrap_content"
                 android:text="Pause"
                 android:textSize="12sp"
                 android:textColor="#FFFFFF" />
@@ -111,97 +99,133 @@
             android:id="@+id/selectVideoButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Select Video"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="12dp"
+            android:text="Select Video" />
+
+        <Button
+            android:id="@+id/generateCaptionsButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Generate Captions" />
+
+        <!-- 3 Slots Segmented Tab Selector -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Configure Target Slot:"
+            android:textColor="#00E676"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:layout_marginTop="14dp"
+            android:layout_marginBottom="4dp"/>
 
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="42dp"
             android:orientation="horizontal"
-            android:layout_marginTop="12dp">
+            android:background="#1F1F1F"
+            android:padding="3dp">
 
             <Button
-                android:id="@+id/generateCaptionsButton"
+                android:id="@+id/btnSlotBefore"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginEnd="6dp"
-                android:text="Generate Captions" />
+                android:text="1. Before"
+                android:textSize="12sp"
+                android:textColor="#AAAAAA"
+                android:backgroundTint="#2C2C2C" />
 
             <Button
-                android:id="@+id/exportButton"
+                android:id="@+id/btnSlotActive"
                 android:layout_width="0dp"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:layout_weight="1"
-                android:layout_marginStart="6dp"
-                android:text="Export" />
+                android:text="2. Active"
+                android:textSize="12sp"
+                android:textColor="#000000"
+                android:backgroundTint="#00E676" />
 
+            <Button
+                android:id="@+id/btnSlotAfter"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:text="3. After"
+                android:textSize="12sp"
+                android:textColor="#AAAAAA"
+                android:backgroundTint="#2C2C2C" />
         </LinearLayout>
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Font Style"
-            android:textColor="#CCCCCC"
-            android:textSize="14sp"
-            android:layout_marginTop="16dp" />
+            android:text="Font Family:"
+            android:textColor="#AAAAAA"
+            android:textSize="12sp"
+            android:layout_marginTop="10dp" />
 
         <Spinner
             android:id="@+id/fontStyleSpinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1E1E1E"
-            android:popupBackground="#1E1E1E"
+            android:background="#2A2A2A"
+            android:padding="8dp"
             android:layout_marginTop="4dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Caption Color"
-            android:textColor="#CCCCCC"
-            android:textSize="14sp"
-            android:layout_marginTop="16dp" />
+            android:text="Slot Text Color:"
+            android:textColor="#AAAAAA"
+            android:textSize="12sp"
+            android:layout_marginTop="10dp" />
 
         <Spinner
             android:id="@+id/captionColorSpinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1E1E1E"
-            android:popupBackground="#1E1E1E"
+            android:background="#2A2A2A"
+            android:padding="8dp"
             android:layout_marginTop="4dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Caption Style"
-            android:textColor="#CCCCCC"
-            android:textSize="14sp"
-            android:layout_marginTop="16dp" />
+            android:text="Slot Style:"
+            android:textColor="#AAAAAA"
+            android:textSize="12sp"
+            android:layout_marginTop="10dp" />
 
         <Spinner
             android:id="@+id/captionStyleSpinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="#1E1E1E"
-            android:popupBackground="#1E1E1E"
+            android:background="#2A2A2A"
+            android:padding="8dp"
             android:layout_marginTop="4dp" />
 
         <Button
             android:id="@+id/boxColorButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Box Background Color"
-            android:layout_marginTop="12dp" />
+            android:layout_marginTop="10dp"
+            android:text="Set Box Background Color" />
+
+        <Button
+            android:id="@+id/exportButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Export Video" />
 
         <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Select a video to start"
-            android:textSize="16sp"
+            android:layout_marginTop="12dp"
             android:textColor="#AAAAAA"
-            android:gravity="center"
-            android:layout_marginTop="20dp" />
-
+            android:textSize="13sp" />
     </LinearLayout>
 </ScrollView>
