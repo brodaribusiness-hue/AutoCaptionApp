@@ -33,8 +33,9 @@ public class VideoExporter {
             Uri videoUri,
             List<Caption> captions,
             CaptionStyleOptions.FontOption fontOption,
-            float fontSizePreviewPx,
+            float fontSizeSp,
             int highlightColor,
+            int boxBackgroundColor,
             CaptionStyleOptions.CaptionStyleType style,
             int previewWidthPx,
             int previewHeightPx,
@@ -44,12 +45,6 @@ public class VideoExporter {
             ExportCallback callback) {
 
         Handler mainHandler = new Handler(Looper.getMainLooper());
-
-        if (previewWidthPx <= 0 || previewHeightPx <= 0) {
-            mainHandler.post(() -> callback.onError(
-                    "Preview not ready yet.try again in a moment"));
-            return;
-        }
 
         new Thread(() -> {
             File tempInputVideo = new File(context.getCacheDir(), "export_input.mp4");
@@ -74,7 +69,7 @@ public class VideoExporter {
                 String assContent = AssSubtitleBuilder.build(
                         captions, videoWidth, videoHeight,
                         previewWidthPx, previewHeightPx,
-                        familyName, fontSizePreviewPx, highlightColor, style,
+                        familyName, fontSizeSp, highlightColor, boxBackgroundColor, style,
                         beforeSlot, activeSlot, afterSlot);
 
                 try (FileOutputStream fos = new FileOutputStream(assFile)) {
