@@ -15,21 +15,13 @@ import java.util.List;
 public class SpeechToText {
 
     public interface ResultCallback {
-    void onProgress(String message);
-    // FIX: was a single String; now returns EVERY utterance's JSON
-    // result, since Vosk emits one JSON chunk per detected pause,
-    // not one JSON for the whole file.
-    void onSuccess(List<String> jsonResults);
-    void onError(String message);
-}
+        void onProgress(String message);
+        void onSuccess(List<String> jsonResults);
+        void onError(String message);
     }
 
     private static Model cachedModel;
     private static String cachedModelPath;
-
-    // FIX: tracks whether a recognition is currently running on a
-    // background thread, so releaseModel() never closes a model that's
-    // still in use (which risks a native use-after-free / crash).
     private static int activeRecognitions = 0;
     private static boolean releasePending = false;
 
@@ -43,7 +35,6 @@ public class SpeechToText {
         new Thread(new Runnable() {
             @Override
             public void run() {
-
                 Recognizer recognizer = null;
                 FileInputStream inputStream = null;
 
@@ -78,23 +69,11 @@ public class SpeechToText {
 
                     byte[] buffer = new byte[4096];
                     int bytesRead;
-                    Recognizer finalRecognizer = recognizer;
-
-                    // FIX: acceptWaveForm() returning true means Vosk just
-                    // finalized an utterance (detected a pause) — that
-                    // result MUST be retrieved via getResult() right away,
-                    // or it is lost when the next chunk is fed in. The
-                    // original code ignored this return value entirely and
-                    // only ever read getFinalResult() once at the very end,
-                    // which silently dropped every sentence except the last.
                     List<String> jsonResults = new ArrayList<>();
 
-                    while ((bytesRead = inputStream.read(buffer)) >= 0) {
-    boolean utteranceComplete =
-            finalRecognizer.acceptWaveForm(buffer, bytesRead);
-    if (utteranceComplete) {
-        jsonResults.add(finalRecognizer.getResult());
-    }
+                    while ((bytesRead = inputStream.read(buffer)) > 0) {
+                        if (recognizer.acceptWaveForm(buffer, bytesRead)) {
+                            jsonResults.add(recognizer.getResult());
                         }
 
                         bytesProcessed += bytesRead;
@@ -109,9 +88,7 @@ public class SpeechToText {
                         }
                     }
 
-                    // Whatever utterance is still open when the file ends.
-                    jsonResults.add(finalRecognizer.getFinalResult());
-
+                    jsonResults.add(recognizer.getFinalResult());
                     mainHandler.post(() -> callback.onSuccess(jsonResults));
 
                 } catch (Exception e) {
@@ -153,9 +130,6 @@ public class SpeechToText {
         return cachedModel;
     }
 
-    // FIX: if a recognition is still running on a background thread when
-    // the Activity is destroyed, defer closing the model until that
-    // thread finishes, instead of closing it out from under it.
     public static synchronized void releaseModel() {
         if (activeRecognitions > 0) {
             releasePending = true;
