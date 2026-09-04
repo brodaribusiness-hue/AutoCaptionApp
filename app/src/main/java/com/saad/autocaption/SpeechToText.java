@@ -51,23 +51,27 @@ public class SpeechToText {
                 recognizer.setWords(true);
 
                 inputStream = new BufferedInputStream(new FileInputStream(wavFile));
-                long skipped = inputStream.skip(wavInfo.dataOffset);
-                if (skipped != wavInfo.dataOffset) {
-                    throw new Exception("Could not seek to WAV audio data");
+                long skipped = 0;
+                while (skipped < wavInfo.dataOffset) {
+                    long s = inputStream.skip(wavInfo.dataOffset - skipped);
+                    if (s <= 0) break;
+                    skipped += s;
                 }
 
                 long totalAudioBytes = wavFile.length() - wavInfo.dataOffset;
                 long bytesProcessed = 0;
                 int lastReportedPercent = -1;
 
-                // 16KB buffer for high recognition throughput and reduced JNI overhead
-                byte[] buffer = new byte[16384];
+                byte[] buffer = new byte[8192];
                 int bytesRead;
                 List<String> jsonResults = new ArrayList<>();
 
                 while ((bytesRead = inputStream.read(buffer)) > 0) {
                     if (recognizer.acceptWaveForm(buffer, bytesRead)) {
-                        jsonResults.add(recognizer.getResult());
+                        String res = recognizer.getResult();
+                        if (res != null && !res.isEmpty()) {
+                            jsonResults.add(res);
+                        }
                     }
 
                     bytesProcessed += bytesRead;
@@ -96,7 +100,7 @@ public class SpeechToText {
                     try { inputStream.close(); } catch (Exception ignored) {}
                 }
                 if (recognizer != null) {
-                    recognizer.close();
+                    try { recognizer.close(); } catch (Exception ignored) {}
                 }
                 synchronized (SpeechToText.class) {
                     activeRecognitions--;
