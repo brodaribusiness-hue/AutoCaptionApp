@@ -6,7 +6,8 @@ import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.net.Uri;
 
-import java.io.ByteArrayOutputStream;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -20,11 +21,7 @@ public class AudioExtractor {
         void onError(String message);
     }
 
-    public static void extractAudioToWav(
-            Context context,
-            Uri videoUri,
-            ExtractCallback callback) {
-
+    public static void extractAudioToWav(Context context, Uri videoUri, ExtractCallback callback) {
         new Thread(() -> {
             MediaExtractor extractor = new MediaExtractor();
             MediaCodec decoder = null;
@@ -60,10 +57,11 @@ public class AudioExtractor {
                 int srcSampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE);
                 int srcChannels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT);
 
-                tempPcm = new File(context.getCacheDir(), "raw_audio_" + UUID.randomUUID() + ".pcm");
-                wavFile = new File(context.getCacheDir(), "audio_16k_" + UUID.randomUUID() + ".wav");
+                String uid = UUID.randomUUID().toString();
+                tempPcm = new File(context.getCacheDir(), "raw_" + uid + ".pcm");
+                wavFile = new File(context.getCacheDir(), "audio_16k_" + uid + ".wav");
 
-                try (FileOutputStream pcmOut = new FileOutputStream(tempPcm)) {
+                try (BufferedOutputStream pcmOut = new BufferedOutputStream(new FileOutputStream(tempPcm))) {
                     MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
                     boolean sawInputEOS = false;
                     boolean sawOutputEOS = false;
@@ -98,10 +96,11 @@ public class AudioExtractor {
                             }
                         }
                     }
+                    pcmOut.flush();
                 }
 
-                // Strictly resample audio to 16000 Hz Mono WAV for accurate Vosk synchronization
-                write16kWavFile(tempPcm, wavFile, srcSampleRate, srcChannels);
+                // Chunk-by-chunk stream downsampling (Zero Memory Spike)
+                resampleTo16kMonoWav(tempPcm, wavFile, srcSampleRate, srcChannels);
 
                 File finalWav = wavFile;
                 callback.onSuccess(finalWav);
@@ -118,103 +117,95 @@ public class AudioExtractor {
         }).start();
     }
 
-    private static void write16kWavFile(
-            File pcmFile, File wavFile, int srcSampleRate, int srcChannels) throws Exception {
-
+    private static void resampleTo16kMonoWav(File pcmFile, File wavFile, int srcSampleRate, int srcChannels) throws Exception {
         int targetSampleRate = 16000;
         int targetChannels = 1;
-        File processedPcm = new File(pcmFile.getParentFile(), pcmFile.getName() + ".16k.raw");
+        File pcm16k = new File(pcmFile.getParentFile(), pcmFile.getName() + ".16k.raw");
 
-        try (FileInputStream in = new FileInputStream(pcmFile);
-             FileOutputStream out = new FileOutputStream(processedPcm)) {
+        double ratio = (double) srcSampleRate / targetSampleRate;
+        byte[] inChunk = new byte[8192 * srcChannels * 2];
 
-            byte[] inBuffer = new byte[4096];
+        try (BufferedInputStream in = new BufferedInputStream(new FileInputStream(pcmFile));
+             BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(pcm16k))) {
+
             int bytesRead;
-            double resampleRatio = (double) srcSampleRate / targetSampleRate;
+            while ((bytesRead = in.read(inChunk)) != -1) {
+                int samplesInChunk = bytesRead / (2 * srcChannels);
+                int targetSamples = (int) (samplesInChunk / ratio);
+                byte[] outChunk = new byte[targetSamples * 2];
+                int outOffset = 0;
 
-            ByteArrayOutputStream rawStream = new ByteArrayOutputStream();
-            while ((bytesRead = in.read(inBuffer)) != -1) {
-                rawStream.write(inBuffer, 0, bytesRead);
-            }
+                for (int i = 0; i < targetSamples; i++) {
+                    int srcIndex = (int) (i * ratio);
+                    if (srcIndex >= samplesInChunk) break;
 
-            byte[] allPcm = rawStream.toByteArray();
-            int totalSourceSamples = allPcm.length / (2 * srcChannels);
-            int totalTargetSamples = (int) (totalSourceSamples / resampleRatio);
+                    int offset = srcIndex * 2 * srcChannels;
+                    short monoSample;
 
-            byte[] outBuffer = new byte[totalTargetSamples * 2];
-            int outOffset = 0;
+                    if (srcChannels >= 2 && (offset + 3) < bytesRead) {
+                        short left = (short) ((inChunk[offset] & 0xFF) | (inChunk[offset + 1] << 8));
+                        short right = (short) ((inChunk[offset + 2] & 0xFF) | (inChunk[offset + 3] << 8));
+                        monoSample = (short) ((left + right) / 2);
+                    } else if ((offset + 1) < bytesRead) {
+                        monoSample = (short) ((inChunk[offset] & 0xFF) | (inChunk[offset + 1] << 8));
+                    } else {
+                        monoSample = 0;
+                    }
 
-            for (int i = 0; i < totalTargetSamples; i++) {
-                int srcIndex = (int) (i * resampleRatio);
-                if (srcIndex >= totalSourceSamples) break;
-
-                int sampleOffset = srcIndex * 2 * srcChannels;
-                short monoSample;
-
-                if (srcChannels == 2 && (sampleOffset + 3) < allPcm.length) {
-                    short left = (short) ((allPcm[sampleOffset] & 0xFF) | (allPcm[sampleOffset + 1] << 8));
-                    short right = (short) ((allPcm[sampleOffset + 2] & 0xFF) | (allPcm[sampleOffset + 3] << 8));
-                    monoSample = (short) ((left + right) / 2);
-                } else if ((sampleOffset + 1) < allPcm.length) {
-                    monoSample = (short) ((allPcm[sampleOffset] & 0xFF) | (allPcm[sampleOffset + 1] << 8));
-                } else {
-                    monoSample = 0;
+                    outChunk[outOffset++] = (byte) (monoSample & 0xFF);
+                    outChunk[outOffset++] = (byte) ((monoSample >> 8) & 0xFF);
                 }
-
-                outBuffer[outOffset++] = (byte) (monoSample & 0xFF);
-                outBuffer[outOffset++] = (byte) ((monoSample >> 8) & 0xFF);
+                out.write(outChunk, 0, outOffset);
             }
-
-            out.write(outBuffer, 0, outOffset);
+            out.flush();
         }
 
-        try (FileInputStream finalIn = new FileInputStream(processedPcm)) {
-            writeHeaderAndCopy(finalIn, wavFile, targetSampleRate, targetChannels, processedPcm.length());
+        try (BufferedInputStream finalIn = new BufferedInputStream(new FileInputStream(pcm16k))) {
+            writeHeaderAndCopy(finalIn, wavFile, targetSampleRate, targetChannels, pcm16k.length());
         } finally {
-            processedPcm.delete();
+            pcm16k.delete();
         }
     }
 
-    private static void writeHeaderAndCopy(
-            FileInputStream in, File wavFile, int sampleRate, int channels, long pcmDataLength) throws Exception {
-
-        long totalDataLen = pcmDataLength + 36;
+    private static void writeHeaderAndCopy(BufferedInputStream in, File wavFile, int sampleRate, int channels, long pcmLen) throws Exception {
+        long totalDataLen = pcmLen + 36;
         long byteRate = sampleRate * channels * 2L;
 
-        byte[] header = new byte[44];
-        header[0] = 'R'; header[1] = 'I'; header[2] = 'F'; header[3] = 'F';
-        header[4] = (byte) (totalDataLen & 0xff);
-        header[5] = (byte) ((totalDataLen >> 8) & 0xff);
-        header[6] = (byte) ((totalDataLen >> 16) & 0xff);
-        header[7] = (byte) ((totalDataLen >> 24) & 0xff);
-        header[8] = 'W'; header[9] = 'A'; header[10] = 'V'; header[11] = 'E';
-        header[12] = 'f'; header[13] = 'm'; header[14] = 't'; header[15] = ' ';
-        header[16] = 16; header[17] = 0; header[18] = 0; header[19] = 0;
-        header[20] = 1; header[21] = 0;
-        header[22] = (byte) channels; header[23] = 0;
-        header[24] = (byte) (sampleRate & 0xff);
-        header[25] = (byte) ((sampleRate >> 8) & 0xff);
-        header[26] = (byte) ((sampleRate >> 16) & 0xff);
-        header[27] = (byte) ((sampleRate >> 24) & 0xff);
-        header[28] = (byte) (byteRate & 0xff);
-        header[29] = (byte) ((byteRate >> 8) & 0xff);
-        header[30] = (byte) ((byteRate >> 16) & 0xff);
-        header[31] = (byte) ((byteRate >> 24) & 0xff);
-        header[32] = (byte) (channels * 2); header[33] = 0;
-        header[34] = 16; header[35] = 0;
-        header[36] = 'd'; header[37] = 'a'; header[38] = 't'; header[39] = 'a';
-        header[40] = (byte) (pcmDataLength & 0xff);
-        header[41] = (byte) ((pcmDataLength >> 8) & 0xff);
-        header[42] = (byte) ((pcmDataLength >> 16) & 0xff);
-        header[43] = (byte) ((pcmDataLength >> 24) & 0xff);
+        byte[] h = new byte[44];
+        h[0] = 'R'; h[1] = 'I'; h[2] = 'F'; h[3] = 'F';
+        h[4] = (byte) (totalDataLen & 0xff);
+        h[5] = (byte) ((totalDataLen >> 8) & 0xff);
+        h[6] = (byte) ((totalDataLen >> 16) & 0xff);
+        h[7] = (byte) ((totalDataLen >> 24) & 0xff);
+        h[8] = 'W'; h[9] = 'A'; h[10] = 'V'; h[11] = 'E';
+        h[12] = 'f'; h[13] = 'm'; h[14] = 't'; h[15] = ' ';
+        h[16] = 16; h[17] = 0; h[18] = 0; h[19] = 0;
+        h[20] = 1; h[21] = 0;
+        h[22] = (byte) channels; h[23] = 0;
+        h[24] = (byte) (sampleRate & 0xff);
+        h[25] = (byte) ((sampleRate >> 8) & 0xff);
+        h[26] = (byte) ((sampleRate >> 16) & 0xff);
+        h[27] = (byte) ((sampleRate >> 24) & 0xff);
+        h[28] = (byte) (byteRate & 0xff);
+        h[29] = (byte) ((byteRate >> 8) & 0xff);
+        h[30] = (byte) ((byteRate >> 16) & 0xff);
+        h[31] = (byte) ((byteRate >> 24) & 0xff);
+        h[32] = (byte) (channels * 2); h[33] = 0;
+        h[34] = 16; h[35] = 0;
+        h[36] = 'd'; h[37] = 'a'; h[38] = 't'; h[39] = 'a';
+        h[40] = (byte) (pcmLen & 0xff);
+        h[41] = (byte) ((pcmLen >> 8) & 0xff);
+        h[42] = (byte) ((pcmLen >> 16) & 0xff);
+        h[43] = (byte) ((pcmLen >> 24) & 0xff);
 
-        try (FileOutputStream out = new FileOutputStream(wavFile)) {
-            out.write(header);
-            byte[] buffer = new byte[4096];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
+        try (BufferedOutputStream out = new BufferedOutputStream(new FileOutputStream(wavFile))) {
+            out.write(h);
+            byte[] buf = new byte[8192];
+            int r;
+            while ((r = in.read(buf)) != -1) {
+                out.write(buf, 0, r);
             }
+            out.flush();
         }
     }
 }
