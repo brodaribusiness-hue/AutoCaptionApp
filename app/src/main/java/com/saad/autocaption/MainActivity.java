@@ -55,6 +55,17 @@ public class MainActivity extends AppCompatActivity {
     private TextView timeText;
     private boolean isTrackingTouch = false;
 
+    // Slot Controls
+    private Button btnSlotBefore;
+    private Button btnSlotActive;
+    private Button btnSlotAfter;
+
+    private SlotStyleConfig configSlotBefore;
+    private SlotStyleConfig configSlotActive;
+    private SlotStyleConfig configSlotAfter;
+    private int currentSelectedSlotIndex = 1; // 0 = Before, 1 = Active, 2 = After
+    private boolean isUpdatingSpinnersProgrammatically = false;
+
     private Uri videoUri;
     private File extractedWavFile;
     private List<Caption> captions;
@@ -68,14 +79,7 @@ public class MainActivity extends AppCompatActivity {
     private SlotGestureHelper activeSlotGesture;
     private SlotGestureHelper afterSlotGesture;
 
-    private Typeface selectedTypeface = Typeface.SANS_SERIF;
-    private CaptionStyleOptions.FontOption selectedFontOption;
-    private int selectedColor = 0xFFFFEA00;
-    private int selectedBoxColor = 0xCC000000;
     private final float selectedFontSizeSp = 22f;
-
-    private CaptionStyleOptions.CaptionStyleType selectedStyle =
-            CaptionStyleOptions.CaptionStyleType.HIGHLIGHT_POP;
 
     private final AtomicInteger requestIdGenerator = new AtomicInteger(0);
     private volatile int currentRequestId = 0;
@@ -91,6 +95,16 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.layout_main);
+
+        CaptionStyleOptions.FontOption defaultFont = CaptionStyleOptions.getFontOptions()[0];
+        Typeface defaultTf = CaptionStyleOptions.resolveTypeface(this, defaultFont);
+
+        configSlotBefore = new SlotStyleConfig(defaultFont, defaultTf, 0xFFCCCCCC,
+                CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN, 0xCC000000);
+        configSlotActive = new SlotStyleConfig(defaultFont, defaultTf, 0xFFFFEA00,
+                CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT, 0xCC000000);
+        configSlotAfter = new SlotStyleConfig(defaultFont, defaultTf, 0xFFCCCCCC,
+                CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN, 0xCC000000);
 
         pickVideoLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
@@ -110,31 +124,35 @@ public class MainActivity extends AppCompatActivity {
 
         requestStoragePermissionIfNeeded();
 
-        videoSurface = (SurfaceView) findViewById(R.id.videoSurface);
-        videoPreviewContainer = (AspectRatioFrameLayout) findViewById(R.id.videoPreviewContainer);
-        wordSlotBefore = (TextView) findViewById(R.id.wordSlotBefore);
-        wordSlotActive = (TextView) findViewById(R.id.wordSlotActive);
-        wordSlotAfter = (TextView) findViewById(R.id.wordSlotAfter);
-        Button selectVideoButton = (Button) findViewById(R.id.selectVideoButton);
-        generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
-        exportButton = (Button) findViewById(R.id.exportButton);
-        boxColorButton = (Button) findViewById(R.id.boxColorButton);
-        statusText = (TextView) findViewById(R.id.statusText);
-        fontStyleSpinner = (Spinner) findViewById(R.id.fontStyleSpinner);
-        captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
-        captionStyleSpinner = (Spinner) findViewById(R.id.captionStyleSpinner);
+        videoSurface = findViewById(R.id.videoSurface);
+        videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
+        wordSlotBefore = findViewById(R.id.wordSlotBefore);
+        wordSlotActive = findViewById(R.id.wordSlotActive);
+        wordSlotAfter = findViewById(R.id.wordSlotAfter);
+        Button selectVideoButton = findViewById(R.id.selectVideoButton);
+        generateCaptionsButton = findViewById(R.id.generateCaptionsButton);
+        exportButton = findViewById(R.id.exportButton);
+        boxColorButton = findViewById(R.id.boxColorButton);
+        statusText = findViewById(R.id.statusText);
+        fontStyleSpinner = findViewById(R.id.fontStyleSpinner);
+        captionColorSpinner = findViewById(R.id.captionColorSpinner);
+        captionStyleSpinner = findViewById(R.id.captionStyleSpinner);
 
-        playPauseButton = (Button) findViewById(R.id.playPauseButton);
-        videoSeekBar = (SeekBar) findViewById(R.id.videoSeekBar);
-        timeText = (TextView) findViewById(R.id.timeText);
+        playPauseButton = findViewById(R.id.playPauseButton);
+        videoSeekBar = findViewById(R.id.videoSeekBar);
+        timeText = findViewById(R.id.timeText);
+
+        btnSlotBefore = findViewById(R.id.btnSlotBefore);
+        btnSlotActive = findViewById(R.id.btnSlotActive);
+        btnSlotAfter = findViewById(R.id.btnSlotAfter);
+
+        btnSlotBefore.setOnClickListener(v -> selectSlotTab(0));
+        btnSlotActive.setOnClickListener(v -> selectSlotTab(1));
+        btnSlotAfter.setOnClickListener(v -> selectSlotTab(2));
 
         wordSlotBefore.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         wordSlotActive.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         wordSlotAfter.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-
-        wordSlotBefore.setTypeface(selectedTypeface);
-        wordSlotActive.setTypeface(selectedTypeface);
-        wordSlotAfter.setTypeface(selectedTypeface);
 
         wordSlotBefore.setTextSize(TypedValue.COMPLEX_UNIT_SP, selectedFontSizeSp);
         wordSlotActive.setTextSize(TypedValue.COMPLEX_UNIT_SP, selectedFontSizeSp);
@@ -155,6 +173,8 @@ public class MainActivity extends AppCompatActivity {
         setupFontSpinner();
         setupColorSpinner();
         setupStyleSpinner();
+
+        selectSlotTab(1);
 
         playPauseButton.setOnClickListener(v -> {
             if (mediaPlayer != null) {
@@ -180,11 +200,13 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onStopTrackingTouch(SeekBar seekBar) { isTrackingTouch = false; }
         });
 
-        boxColorButton.setOnClickListener(v ->
-                showBoxColorPickerDialog(selectedBoxColor, color -> {
-                    selectedBoxColor = color;
-                    triggerManualCaptionRedraw();
-                }));
+        boxColorButton.setOnClickListener(v -> {
+            SlotStyleConfig current = getCurrentSlotConfig();
+            showBoxColorPickerDialog(current.boxColor, color -> {
+                current.boxColor = color;
+                triggerManualCaptionRedraw();
+            });
+        });
 
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
@@ -258,11 +280,11 @@ public class MainActivity extends AppCompatActivity {
                     MainActivity.this,
                     videoUri,
                     captions,
-                    selectedFontOption,
+                    configSlotActive.fontOption,
                     selectedFontSizeSp,
-                    selectedColor,
-                    selectedBoxColor,
-                    selectedStyle,
+                    configSlotActive.textColor,
+                    configSlotActive.boxColor,
+                    configSlotActive.styleType,
                     previewWidthPx,
                     previewHeightPx,
                     beforeTransform,
@@ -295,6 +317,63 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    private SlotStyleConfig getCurrentSlotConfig() {
+        if (currentSelectedSlotIndex == 0) return configSlotBefore;
+        if (currentSelectedSlotIndex == 2) return configSlotAfter;
+        return configSlotActive;
+    }
+
+    private void selectSlotTab(int slotIndex) {
+        currentSelectedSlotIndex = slotIndex;
+
+        btnSlotBefore.setBackgroundColor(slotIndex == 0 ? 0xFF00E676 : 0xFF2C2C2C);
+        btnSlotBefore.setTextColor(slotIndex == 0 ? 0xFF000000 : 0xFFAAAAAA);
+
+        btnSlotActive.setBackgroundColor(slotIndex == 1 ? 0xFF00E676 : 0xFF2C2C2C);
+        btnSlotActive.setTextColor(slotIndex == 1 ? 0xFF000000 : 0xFFAAAAAA);
+
+        btnSlotAfter.setBackgroundColor(slotIndex == 2 ? 0xFF00E676 : 0xFF2C2C2C);
+        btnSlotAfter.setTextColor(slotIndex == 2 ? 0xFF000000 : 0xFFAAAAAA);
+
+        syncSpinnersWithCurrentConfig();
+    }
+
+    private void syncSpinnersWithCurrentConfig() {
+        isUpdatingSpinnersProgrammatically = true;
+        SlotStyleConfig current = getCurrentSlotConfig();
+
+        CaptionStyleOptions.FontOption[] fonts = CaptionStyleOptions.getFontOptions();
+        for (int i = 0; i < fonts.length; i++) {
+            if (fonts[i].label.equals(current.fontOption.label)) {
+                fontStyleSpinner.setSelection(i);
+                break;
+            }
+        }
+
+        CaptionStyleOptions.StyleOption[] styles = CaptionStyleOptions.getStyleOptions();
+        for (int i = 0; i < styles.length; i++) {
+            if (styles[i].type == current.styleType) {
+                captionStyleSpinner.setSelection(i);
+                break;
+            }
+        }
+
+        CaptionStyleOptions.ColorOption[] colors = CaptionStyleOptions.getColorOptions();
+        boolean matched = false;
+        for (int i = 0; i < colors.length; i++) {
+            if (colors[i].color != 0 && colors[i].color == current.textColor) {
+                captionColorSpinner.setSelection(i);
+                matched = true;
+                break;
+            }
+        }
+        if (!matched) {
+            captionColorSpinner.setSelection(colors.length - 1);
+        }
+
+        isUpdatingSpinnersProgrammatically = false;
+    }
+
     private float dpToPx(float dp) {
         return dp * getResources().getDisplayMetrics().density;
     }
@@ -312,7 +391,6 @@ public class MainActivity extends AppCompatActivity {
 
     private void setupFontSpinner() {
         CaptionStyleOptions.FontOption[] fonts = CaptionStyleOptions.getFontOptions();
-        selectedFontOption = fonts[0];
 
         ArrayAdapter<CaptionStyleOptions.FontOption> adapter =
                 new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, fonts);
@@ -322,12 +400,11 @@ public class MainActivity extends AppCompatActivity {
         fontStyleSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                CaptionStyleOptions.FontOption chosen = fonts[position];
-                selectedFontOption = chosen;
-                selectedTypeface = CaptionStyleOptions.resolveTypeface(MainActivity.this, chosen);
-                wordSlotBefore.setTypeface(selectedTypeface);
-                wordSlotActive.setTypeface(selectedTypeface);
-                wordSlotAfter.setTypeface(selectedTypeface);
+                if (isUpdatingSpinnersProgrammatically) return;
+                SlotStyleConfig current = getCurrentSlotConfig();
+                current.fontOption = fonts[position];
+                current.typeface = CaptionStyleOptions.resolveTypeface(MainActivity.this, current.fontOption);
+                triggerManualCaptionRedraw();
             }
 
             @Override public void onNothingSelected(AdapterView<?> parent) {}
@@ -345,15 +422,17 @@ public class MainActivity extends AppCompatActivity {
         captionColorSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (isUpdatingSpinnersProgrammatically) return;
                 CaptionStyleOptions.ColorOption chosen = colors[position];
+                SlotStyleConfig current = getCurrentSlotConfig();
                 if (chosen.color == 0) {
                     showHueColorPickerDialog(
-                            "Pick Caption Color", selectedColor, color -> {
-                                selectedColor = color;
+                            "Pick Caption Color", current.textColor, color -> {
+                                current.textColor = color;
                                 triggerManualCaptionRedraw();
                             });
                 } else {
-                    selectedColor = chosen.color;
+                    current.textColor = chosen.color;
                     triggerManualCaptionRedraw();
                 }
             }
@@ -373,7 +452,8 @@ public class MainActivity extends AppCompatActivity {
         captionStyleSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                selectedStyle = styles[position].type;
+                if (isUpdatingSpinnersProgrammatically) return;
+                getCurrentSlotConfig().styleType = styles[position].type;
                 triggerManualCaptionRedraw();
             }
 
@@ -636,70 +716,60 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    private Object buildActiveWordSpan(int color) {
-        switch (selectedStyle) {
-            case HIGHLIGHT_POP:
-                return new android.text.style.ForegroundColorSpan(color);
-            case GREEN_EMPHASIS:
-                return new android.text.style.ForegroundColorSpan(0xFF00E676);
-            case KARAOKE_FLOW:
-                return new KaraokeFillSpan(0xFFFFFFFF, color, 8f);
-            case ONE_WORD_PUNCH:
-                return new PopScaleSpan(color, 1.8f);
-            case BOX_HIGHLIGHT:
-                return new BackgroundBoxSpan(color, selectedBoxColor, 14f, 14f);
-            case BOUNCE:
-                return new BounceSpan(color);
-            case GLOW_POP:
-                int glowColor = (color & 0x00FFFFFF) | 0x80000000;
-                return new GlowPopSpan(color, glowColor, 1.15f, 5f);
-            case MINIMAL_CLEAN:
-            default:
-                return null;
-        }
-    }
-
-    private int restWordColor() {
-        switch (selectedStyle) {
-            case HIGHLIGHT_POP:
-            case GREEN_EMPHASIS:
-            case MINIMAL_CLEAN:
-                return 0xFFFFFFFF;
-            default:
-                return 0xCCCCCCCC;
-        }
-    }
-
-    private void applySlotStyle(TextView slot, Caption caption, boolean isActive) {
+    private void applySlotStyle(TextView slot, Caption caption, SlotStyleConfig config, boolean isActive) {
         if (caption == null || caption.word == null || caption.word.isEmpty()) {
             slot.setText("");
             return;
         }
         String word = caption.word;
-        int effectiveColor = caption.resolveColor(selectedColor);
+        int effectiveColor = (caption.customColor != 0) ? caption.customColor : config.textColor;
 
-        if (selectedStyle == CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN) {
-            slot.setText(word);
-            slot.setTextColor(0xFFFFFFFF);
-            slot.setTypeface(selectedTypeface, Typeface.BOLD);
-            return;
-        }
+        slot.setTypeface(config.typeface);
 
-        if (!isActive) {
+        if (config.styleType == CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN) {
             slot.setText(word);
-            slot.setTextColor(restWordColor());
-            slot.setTypeface(selectedTypeface, Typeface.NORMAL);
+            slot.setTextColor(effectiveColor);
+            slot.setTypeface(config.typeface, isActive ? Typeface.BOLD : Typeface.NORMAL);
             return;
         }
 
         android.text.SpannableString spannable = new android.text.SpannableString(word);
-        Object span = buildActiveWordSpan(effectiveColor);
+        Object span = null;
+
+        switch (config.styleType) {
+            case HIGHLIGHT_POP:
+                span = new android.text.style.ForegroundColorSpan(effectiveColor);
+                break;
+            case GREEN_EMPHASIS:
+                span = new android.text.style.ForegroundColorSpan(0xFF00E676);
+                break;
+            case KARAOKE_FLOW:
+                span = new KaraokeFillSpan(0xFFFFFFFF, effectiveColor, 8f);
+                break;
+            case ONE_WORD_PUNCH:
+                span = new PopScaleSpan(effectiveColor, 1.6f);
+                break;
+            case BOX_HIGHLIGHT:
+                span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 14f, 14f);
+                break;
+            case BOUNCE:
+                span = new BounceSpan(effectiveColor);
+                break;
+            case GLOW_POP:
+                int glow = (effectiveColor & 0x00FFFFFF) | 0x80000000;
+                span = new GlowPopSpan(effectiveColor, glow, 1.15f, 5f);
+                break;
+            default:
+                break;
+        }
+
         if (span != null) {
             spannable.setSpan(span, 0, word.length(), 0);
         }
-        boolean skipBold = selectedStyle == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT
-                || selectedStyle == CaptionStyleOptions.CaptionStyleType.KARAOKE_FLOW;
-        slot.setTypeface(selectedTypeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
+
+        boolean skipBold = config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT
+                || config.styleType == CaptionStyleOptions.CaptionStyleType.KARAOKE_FLOW;
+        slot.setTypeface(config.typeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
         slot.setText(spannable);
     }
 
@@ -734,21 +804,17 @@ public class MainActivity extends AppCompatActivity {
             if (groupIndex != -1) {
                 CaptionGrouper.Group group = captionGroups.get(groupIndex);
                 int activeIndex = group.nearestIndexAt(currentTimeSec);
-                boolean oneWordPunch = selectedStyle == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
+
+                boolean oneWordPunch = configSlotActive.styleType == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
 
                 if (oneWordPunch) {
                     wordSlotBefore.setText("");
-                    applySlotStyle(wordSlotActive, group.words.get(activeIndex), true);
+                    applySlotStyle(wordSlotActive, group.words.get(activeIndex), configSlotActive, true);
                     wordSlotAfter.setText("");
                 } else {
-                    TextView[] slots = { wordSlotBefore, wordSlotActive, wordSlotAfter };
-                    for (int slotPos = 0; slotPos < slots.length; slotPos++) {
-                        if (slotPos >= group.words.size()) {
-                            slots[slotPos].setText("");
-                        } else {
-                            applySlotStyle(slots[slotPos], group.words.get(slotPos), slotPos == activeIndex);
-                        }
-                    }
+                    applySlotStyle(wordSlotBefore, group.words.size() > 0 ? group.words.get(0) : null, configSlotBefore, activeIndex == 0);
+                    applySlotStyle(wordSlotActive, group.words.size() > 1 ? group.words.get(1) : null, configSlotActive, activeIndex == 1);
+                    applySlotStyle(wordSlotAfter, group.words.size() > 2 ? group.words.get(2) : null, configSlotAfter, activeIndex == 2);
                 }
                 autoSpaceSlots();
             }
@@ -778,23 +844,17 @@ public class MainActivity extends AppCompatActivity {
                             CaptionGrouper.Group group = captionGroups.get(groupIndex);
                             int activeIndex = group.nearestIndexAt(currentTimeSec);
 
-                            boolean oneWordPunch = selectedStyle
+                            boolean oneWordPunch = configSlotActive.styleType
                                     == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
 
                             if (oneWordPunch) {
                                 wordSlotBefore.setText("");
-                                applySlotStyle(wordSlotActive, group.words.get(activeIndex), true);
+                                applySlotStyle(wordSlotActive, group.words.get(activeIndex), configSlotActive, true);
                                 wordSlotAfter.setText("");
                             } else {
-                                TextView[] slots = { wordSlotBefore, wordSlotActive, wordSlotAfter };
-                                for (int slotPos = 0; slotPos < slots.length; slotPos++) {
-                                    if (slotPos >= group.words.size()) {
-                                        slots[slotPos].setText("");
-                                    } else {
-                                        applySlotStyle(slots[slotPos], group.words.get(slotPos),
-                                                slotPos == activeIndex);
-                                    }
-                                }
+                                applySlotStyle(wordSlotBefore, group.words.size() > 0 ? group.words.get(0) : null, configSlotBefore, activeIndex == 0);
+                                applySlotStyle(wordSlotActive, group.words.size() > 1 ? group.words.get(1) : null, configSlotActive, activeIndex == 1);
+                                applySlotStyle(wordSlotAfter, group.words.size() > 2 ? group.words.get(2) : null, configSlotAfter, activeIndex == 2);
                             }
                             autoSpaceSlots();
                         }
