@@ -1,67 +1,82 @@
 package com.saad.autocaption;
+
 import android.content.Context;
 import android.graphics.Typeface;
 import android.view.Gravity;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+
 public class CaptionStyleOptions {
+
     public static class FontOption {
         public final String label;
-        public final String assetFileName; // null = built-in system font
+        public final String assetFileName;   // null = system font
         public final Typeface builtInTypeface;
         public final String exportFamilyName; // family name written into the .ass file
-        public final String systemFontFile;   // filename under /system/fonts (null for custom fonts)
-        FontOption(String label, String assetFileName, Typeface builtInTypeface,
-                   String exportFamilyName, String systemFontFile) {
+        public final String systemFontFile;   // filename under /system/fonts
+
+        FontOption(String label, String assetFileName, Typeface builtInTypeface, String exportFamilyName, String systemFontFile) {
             this.label = label;
             this.assetFileName = assetFileName;
             this.builtInTypeface = builtInTypeface;
             this.exportFamilyName = exportFamilyName;
             this.systemFontFile = systemFontFile;
         }
+
         @Override
         public String toString() {
             return label;
         }
     }
+
     public static class ColorOption {
         public final String label;
         public final int color;
+
         ColorOption(String label, int color) {
             this.label = label;
             this.color = color;
         }
+
         @Override
         public String toString() {
             return label;
         }
     }
+
     public static class FontSizeOption {
         public final String label;
         public final float sizeSp;
+
         FontSizeOption(String label, float sizeSp) {
             this.label = label;
             this.sizeSp = sizeSp;
         }
+
         @Override
         public String toString() {
             return label;
         }
     }
+
     public static class PositionOption {
         public final String label;
         public final int gravity;
+
         PositionOption(String label, int gravity) {
             this.label = label;
             this.gravity = gravity;
         }
+
         @Override
         public String toString() {
             return label;
         }
     }
+
     public enum CaptionStyleType {
         HIGHLIGHT_POP,
         GREEN_EMPHASIS,
@@ -72,42 +87,55 @@ public class CaptionStyleOptions {
         GLOW_POP,
         MINIMAL_CLEAN
     }
+
     public static class StyleOption {
         public final String label;
         public final CaptionStyleType type;
+
         StyleOption(String label, CaptionStyleType type) {
             this.label = label;
             this.type = type;
         }
+
         @Override
         public String toString() {
             return label;
         }
     }
+
     public static FontOption[] getFontOptions() {
         return new FontOption[]{
-                new FontOption("Modern", null, Typeface.SANS_SERIF,
-                        "Roboto", "Roboto-Regular.ttf"),
-                new FontOption("Vintage", null, Typeface.SERIF,
-                        "Noto Serif", "NotoSerif-Regular.ttf"),
-                new FontOption("Swanky", null,
-                        Typeface.create("cursive", Typeface.NORMAL),
-                        "Roboto", "Roboto-Regular.ttf"),
-                new FontOption("Aesthetic", null,
-                        Typeface.create("sans-serif-light", Typeface.NORMAL),
-                        "Roboto Light", "Roboto-Light.ttf"),
-                new FontOption("Blissful Script",
-                        "fonts/blissful_script.ttf", Typeface.SERIF,
-                        "Blissful Script", null),
-                new FontOption("Blafhy Glibs",
-                        "fonts/blafhy_glibs.ttf", Typeface.SANS_SERIF,
-                        "Blafhy Glibs", null),
+                // System Presets
+                new FontOption("Modern (Default)", null, Typeface.SANS_SERIF, "Roboto", "Roboto-Regular.ttf"),
+                new FontOption("Serif Classic", null, Typeface.SERIF, "Noto Serif", "NotoSerif-Regular.ttf"),
+
+                // Newly Uploaded Asset Fonts
+                new FontOption("Abril Fatface", "fonts/AbrilFatface-Regular.ttf", Typeface.SERIF, "Abril Fatface", null),
+                new FontOption("Bakbak One", "fonts/BakbakOne-Regular.ttf", Typeface.SANS_SERIF, "Bakbak One", null),
+                new FontOption("Chau Philomene", "fonts/ChauPhilomeneOne-Regular.ttf", Typeface.SANS_SERIF, "Chau Philomene One", null),
+                new FontOption("Chau Philomene Italic", "fonts/ChauPhilomeneOne-Italic.ttf", Typeface.SANS_SERIF, "Chau Philomene One", null),
+                new FontOption("Comic Relief Bold", "fonts/ComicRelief-Bold.ttf", Typeface.SANS_SERIF, "Comic Relief", null),
+                new FontOption("Comic Relief Regular", "fonts/ComicRelief-Regular.ttf", Typeface.SANS_SERIF, "Comic Relief", null),
+                new FontOption("Jost Bold", "fonts/Jost-Bold.ttf", Typeface.SANS_SERIF, "Jost", null),
+                new FontOption("Jost Light Italic", "fonts/Jost-ExtraLightItalic.ttf", Typeface.SANS_SERIF, "Jost", null),
+                new FontOption("Lilita One", "fonts/LilitaOne-Regular.ttf", Typeface.SANS_SERIF, "Lilita One", null),
+                new FontOption("Lugrasimo", "fonts/Lugrasimo-Regular.ttf", Typeface.SERIF, "Lugrasimo", null),
+                new FontOption("Montserrat Alt ExtraBold", "fonts/MontserratAlternates-ExtraBold.ttf", Typeface.SANS_SERIF, "Montserrat Alternates", null),
+                new FontOption("Montserrat Alt BlackItalic", "fonts/MontserratAlternates-BlackItalic.ttf", Typeface.SANS_SERIF, "Montserrat Alternates", null),
+                new FontOption("Petit Formal Script", "fonts/PetitFormalScript-Regular.ttf", Typeface.SERIF, "Petit Formal Script", null),
+                new FontOption("Playfair Display Bold", "fonts/PlayfairDisplay-Bold.ttf", Typeface.SERIF, "Playfair Display", null),
+                new FontOption("Playfair Display Black", "fonts/PlayfairDisplay-Black.ttf", Typeface.SERIF, "Playfair Display", null),
+                new FontOption("Playfair Display Italic", "fonts/PlayfairDisplay-Italic.ttf", Typeface.SERIF, "Playfair Display", null),
+                new FontOption("Playfair Display SemiBold Italic", "fonts/PlayfairDisplay-SemiBoldItalic.ttf", Typeface.SERIF, "Playfair Display", null),
+                new FontOption("Reddit Mono Bold", "fonts/RedditMono-Bold.ttf", Typeface.MONOSPACE, "Reddit Mono", null),
+                new FontOption("Reddit Mono Regular", "fonts/RedditMono-Regular.ttf", Typeface.MONOSPACE, "Reddit Mono", null),
+                new FontOption("Open Sans Variable", "fonts/OpenSans-VariableFont_wdth,wght.ttf", Typeface.SANS_SERIF, "Open Sans", null),
+                new FontOption("Playwrite IT", "fonts/PlaywriteIT-VariableFont_wght.ttf", Typeface.SERIF, "Playwrite IT", null),
+                new FontOption("Public Sans", "fonts/PublicSans-VariableFont_wght.ttf", Typeface.SANS_SERIF, "Public Sans", null),
+                new FontOption("REM Variable", "fonts/REM-VariableFont_wght.ttf", Typeface.SANS_SERIF, "REM", null)
         };
     }
-    // NEW: all preset swatches bumped to fully-saturated "Material
-    // Accent" shades so every preset reads as sharp/bright on video,
-    // matching the hue-only custom picker's guarantee of full
-    // saturation + full brightness.
+
     public static ColorOption[] getColorOptions() {
         return new ColorOption[]{
                 new ColorOption("Yellow", 0xFFFFEA00),
@@ -120,6 +148,7 @@ public class CaptionStyleOptions {
                 new ColorOption("Custom...", 0),
         };
     }
+
     public static FontSizeOption[] getFontSizeOptions() {
         return new FontSizeOption[]{
                 new FontSizeOption("Small", 18f),
@@ -129,6 +158,7 @@ public class CaptionStyleOptions {
                 new FontSizeOption("Huge", 36f),
         };
     }
+
     public static PositionOption[] getPositionOptions() {
         return new PositionOption[]{
                 new PositionOption("Top", Gravity.TOP),
@@ -136,6 +166,7 @@ public class CaptionStyleOptions {
                 new PositionOption("Bottom", Gravity.BOTTOM),
         };
     }
+
     public static StyleOption[] getStyleOptions() {
         return new StyleOption[]{
                 new StyleOption("Highlight Pop", CaptionStyleType.HIGHLIGHT_POP),
@@ -148,36 +179,32 @@ public class CaptionStyleOptions {
                 new StyleOption("Minimal Clean", CaptionStyleType.MINIMAL_CLEAN),
         };
     }
+
     public static Typeface resolveTypeface(Context context, FontOption option) {
         if (option.assetFileName != null) {
             try {
-                return Typeface.createFromAsset(
-                        context.getAssets(), option.assetFileName);
+                return Typeface.createFromAsset(context.getAssets(), option.assetFileName);
             } catch (Exception e) {
                 return option.builtInTypeface;
             }
         }
         return option.builtInTypeface;
     }
-    /** Copies whichever font file the export needs (asset or system font)
-     * into targetDir so ffmpeg's subtitle renderer can find it, and
-     * returns the font family name to use in the .ass file. Falls back
-     * to Roboto if the requested font can't be found. */
-    public static String prepareExportFont(Context context, FontOption option, File targetDir)
-            throws Exception {
+
+    public static String prepareExportFont(Context context, FontOption option, File targetDir) throws Exception {
         if (!targetDir.exists()) {
             targetDir.mkdirs();
         }
+
         if (option.assetFileName != null) {
-            String baseName = option.assetFileName.substring(
-                    option.assetFileName.lastIndexOf('/') + 1);
+            String baseName = option.assetFileName.substring(option.assetFileName.lastIndexOf('/') + 1);
             File dest = new File(targetDir, baseName);
             try (InputStream in = context.getAssets().open(option.assetFileName);
                  OutputStream out = new FileOutputStream(dest)) {
                 copyStream(in, out);
                 return option.exportFamilyName;
             } catch (Exception e) {
-                // Asset not added yet — fall through to Roboto fallback below.
+                // Fallback to system font if missing
             }
         } else if (option.systemFontFile != null) {
             File systemFile = new File("/system/fonts/" + option.systemFontFile);
