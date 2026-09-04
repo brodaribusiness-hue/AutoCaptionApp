@@ -73,6 +73,8 @@ public class MainActivity extends AppCompatActivity {
 
     private CaptionStyleOptions.CaptionStyleType selectedStyle =
             CaptionStyleOptions.CaptionStyleType.HIGHLIGHT_POP;
+    private List<CaptionGrouper.Group> captionGroups;
+private static final int CAPTION_GROUP_SIZE = 3;
 
     private final AtomicInteger requestIdGenerator = new AtomicInteger(0);
     private volatile int currentRequestId = 0;
