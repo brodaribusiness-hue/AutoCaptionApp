@@ -13,10 +13,10 @@ public class CaptionStyleOptions {
 
     public static class FontOption {
         public final String label;
-        public final String assetFileName;   // null = system font
+        public final String assetFileName;   // "fonts/..." path under assets
         public final Typeface builtInTypeface;
-        public final String exportFamilyName; // family name written into the .ass file
-        public final String systemFontFile;   // filename under /system/fonts
+        public final String exportFamilyName; // Font name for .ass subtitle
+        public final String systemFontFile;   // Filename under /system/fonts
 
         FontOption(String label, String assetFileName, Typeface builtInTypeface, String exportFamilyName, String systemFontFile) {
             this.label = label;
@@ -106,18 +106,18 @@ public class CaptionStyleOptions {
     public static FontOption[] getFontOptions() {
         return new FontOption[]{
                 // System Presets
-                new FontOption("Modern (Default)", null, Typeface.SANS_SERIF, "Roboto", "Roboto-Regular.ttf"),
+                new FontOption("Modern (Roboto)", null, Typeface.SANS_SERIF, "Roboto", "Roboto-Regular.ttf"),
                 new FontOption("Serif Classic", null, Typeface.SERIF, "Noto Serif", "NotoSerif-Regular.ttf"),
 
-                // Newly Uploaded Asset Fonts
+                // Exact Asset Fonts from app/src/main/assets/fonts/
                 new FontOption("Abril Fatface", "fonts/AbrilFatface-Regular.ttf", Typeface.SERIF, "Abril Fatface", null),
-                new FontOption("Bakbak One", "fonts/BakbakOne-Regular.ttf", Typeface.SANS_SERIF, "Bakbak One", null),
-                new FontOption("Chau Philomene", "fonts/ChauPhilomeneOne-Regular.ttf", Typeface.SANS_SERIF, "Chau Philomene One", null),
+                new FontOption("Blaka Ink", "fonts/BlakaInk-Regular.ttf", Typeface.SANS_SERIF, "Blaka Ink", null),
+                new FontOption("Chau Philomene Regular", "fonts/ChauPhilomeneOne-Regular.ttf", Typeface.SANS_SERIF, "Chau Philomene One", null),
                 new FontOption("Chau Philomene Italic", "fonts/ChauPhilomeneOne-Italic.ttf", Typeface.SANS_SERIF, "Chau Philomene One", null),
                 new FontOption("Comic Relief Bold", "fonts/ComicRelief-Bold.ttf", Typeface.SANS_SERIF, "Comic Relief", null),
                 new FontOption("Comic Relief Regular", "fonts/ComicRelief-Regular.ttf", Typeface.SANS_SERIF, "Comic Relief", null),
                 new FontOption("Jost Bold", "fonts/Jost-Bold.ttf", Typeface.SANS_SERIF, "Jost", null),
-                new FontOption("Jost Light Italic", "fonts/Jost-ExtraLightItalic.ttf", Typeface.SANS_SERIF, "Jost", null),
+                new FontOption("Jost ExtraLight Italic", "fonts/Jost-ExtraLightItalic.ttf", Typeface.SANS_SERIF, "Jost", null),
                 new FontOption("Lilita One", "fonts/LilitaOne-Regular.ttf", Typeface.SANS_SERIF, "Lilita One", null),
                 new FontOption("Lugrasimo", "fonts/Lugrasimo-Regular.ttf", Typeface.SERIF, "Lugrasimo", null),
                 new FontOption("Montserrat Alt ExtraBold", "fonts/MontserratAlternates-ExtraBold.ttf", Typeface.SANS_SERIF, "Montserrat Alternates", null),
@@ -204,7 +204,7 @@ public class CaptionStyleOptions {
                 copyStream(in, out);
                 return option.exportFamilyName;
             } catch (Exception e) {
-                // Fallback to system font if missing
+                // Fallback to Roboto if asset reading encounters any issue
             }
         } else if (option.systemFontFile != null) {
             File systemFile = new File("/system/fonts/" + option.systemFontFile);
