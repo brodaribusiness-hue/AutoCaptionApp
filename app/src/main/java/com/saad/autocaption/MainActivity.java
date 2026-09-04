@@ -1,31 +1,29 @@
 package com.saad.autocaption;
 
 import android.app.AlertDialog;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
+import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.net.Uri;
-import android.text.InputType;
 import android.util.TypedValue;
-import android.view.View;
-import android.view.SurfaceView;
 import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
-import android.widget.AdapterView;
-import android.media.MediaPlayer;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -53,13 +51,16 @@ public class MainActivity extends AppCompatActivity {
     private Spinner captionColorSpinner;
     private Spinner captionStyleSpinner;
     private AspectRatioFrameLayout videoPreviewContainer;
+
+    // Controls
+    private Button playPauseButton;
+    private SeekBar videoSeekBar;
+    private TextView timeText;
+    private boolean isTrackingTouch = false;
+
     private Uri videoUri;
     private File extractedWavFile;
     private List<Caption> captions;
-
-    // NEW: fixed-size caption blocks mirroring what AssSubtitleBuilder
-    // uses for export, so preview and exported video always match and
-    // captions never appear to type out one word at a time.
     private List<CaptionGrouper.Group> captionGroups;
     private static final int CAPTION_GROUP_SIZE = CaptionGrouper.DEFAULT_GROUP_SIZE;
 
@@ -73,11 +74,7 @@ public class MainActivity extends AppCompatActivity {
     private Typeface selectedTypeface = Typeface.SANS_SERIF;
     private CaptionStyleOptions.FontOption selectedFontOption;
     private int selectedColor = 0xFFFFEB3B;
-
-    // NEW: independent box background color for the Box Highlight
-    // style. Defaults to a semi-transparent black pill.
     private int selectedBoxColor = 0xCC000000;
-
     private final float selectedFontSizeSp = 22f;
 
     private CaptionStyleOptions.CaptionStyleType selectedStyle =
@@ -89,8 +86,6 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<Intent> pickVideoLauncher;
     private ActivityResultLauncher<String> storagePermissionLauncher;
 
-    /** Callback used by both color-picker dialogs to hand back the
-     * color the user picked once they tap Apply. */
     private interface ColorPickCallback {
         void onColorPicked(int color);
     }
@@ -112,8 +107,7 @@ public class MainActivity extends AppCompatActivity {
                 new ActivityResultContracts.RequestPermission(),
                 granted -> {
                     if (!granted) {
-                        statusText.setText(
-                                "Storage permission denied — export may not work on this device");
+                        statusText.setText("Storage permission denied — export may fail");
                     }
                 });
 
@@ -133,6 +127,10 @@ public class MainActivity extends AppCompatActivity {
         fontStyleSpinner = (Spinner) findViewById(R.id.fontStyleSpinner);
         captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
         captionStyleSpinner = (Spinner) findViewById(R.id.captionStyleSpinner);
+
+        playPauseButton = (Button) findViewById(R.id.playPauseButton);
+        videoSeekBar = (SeekBar) findViewById(R.id.videoSeekBar);
+        timeText = (TextView) findViewById(R.id.timeText);
 
         wordSlotBefore.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         wordSlotActive.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
@@ -162,6 +160,37 @@ public class MainActivity extends AppCompatActivity {
         setupColorSpinner();
         setupStyleSpinner();
 
+        playPauseButton.setOnClickListener(v -> {
+            if (mediaPlayer != null) {
+                if (mediaPlayer.isPlaying()) {
+                    mediaPlayer.pause();
+                    playPauseButton.setText("Play");
+                } else {
+                    mediaPlayer.start();
+                    playPauseButton.setText("Pause");
+                }
+            }
+        });
+
+        videoSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser && mediaPlayer != null) {
+                    mediaPlayer.seekTo(progress);
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                isTrackingTouch = true;
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                isTrackingTouch = false;
+            }
+        });
+
         boxColorButton.setOnClickListener(v ->
                 showBoxColorPickerDialog(selectedBoxColor, color -> selectedBoxColor = color));
 
@@ -174,7 +203,6 @@ public class MainActivity extends AppCompatActivity {
         videoSurface.setZOrderMediaOverlay(true);
 
         surfaceHolder.addCallback(new SurfaceHolder.Callback() {
-
             @Override
             public void surfaceCreated(SurfaceHolder holder) {
                 if (videoUri != null) {
@@ -182,9 +210,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            @Override
-            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-            }
+            @Override public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {}
 
             @Override
             public void surfaceDestroyed(SurfaceHolder holder) {
@@ -196,95 +222,86 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        selectVideoButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                intent.setType("video/*");
-                intent.addCategory(Intent.CATEGORY_OPENABLE);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                pickVideoLauncher.launch(intent);
-            }
+        selectVideoButton.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            intent.setType("video/*");
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            pickVideoLauncher.launch(intent);
         });
 
-        generateCaptionsButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (videoUri != null) {
-                    final int requestId = currentRequestId;
-                    generateCaptionsButton.setEnabled(false);
-                    captions = null;
-                    captionGroups = null;
-                    wordSlotBefore.setText("");
-                    wordSlotActive.setText("");
-                    wordSlotAfter.setText("");
-                    extractAudio(videoUri, requestId);
-                }
-            }
-        });
-
-        exportButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (captions == null || captions.isEmpty() || videoUri == null) {
-                    statusText.setText("Generate captions before exporting");
-                    return;
-                }
-                exportButton.setEnabled(false);
+        generateCaptionsButton.setOnClickListener(v -> {
+            if (videoUri != null) {
+                final int requestId = currentRequestId;
                 generateCaptionsButton.setEnabled(false);
-
-                int previewWidthPx = videoPreviewContainer.getWidth();
-                int previewHeightPx = videoPreviewContainer.getHeight();
-
-                CaptionSlotTransform beforeTransform = new CaptionSlotTransform(
-                        wordSlotBefore.getTranslationX(), wordSlotBefore.getTranslationY(),
-                        beforeSlotGesture.getScale());
-                CaptionSlotTransform activeTransform = new CaptionSlotTransform(
-                        wordSlotActive.getTranslationX(), wordSlotActive.getTranslationY(),
-                        activeSlotGesture.getScale());
-                CaptionSlotTransform afterTransform = new CaptionSlotTransform(
-                        wordSlotAfter.getTranslationX(), wordSlotAfter.getTranslationY(),
-                        afterSlotGesture.getScale());
-
-                VideoExporter.export(
-                        MainActivity.this,
-                        videoUri,
-                        captions,
-                        selectedFontOption,
-                        selectedFontSizeSp,
-                        selectedColor,
-                        selectedBoxColor,
-                        selectedStyle,
-                        previewWidthPx,
-                        previewHeightPx,
-                        beforeTransform,
-                        activeTransform,
-                        afterTransform,
-                        new VideoExporter.ExportCallback() {
-                            @Override
-                            public void onProgress(String message) {
-                                runOnUiThread(() -> statusText.setText(message));
-                            }
-
-                            @Override
-                            public void onSuccess(Uri savedUri) {
-                                runOnUiThread(() -> {
-                                    statusText.setText("Saved to gallery!");
-                                    exportButton.setEnabled(true);
-                                    generateCaptionsButton.setEnabled(true);
-                                });
-                            }
-
-                            @Override
-                            public void onError(String message) {
-                                runOnUiThread(() -> {
-                                    statusText.setText(message);
-                                    exportButton.setEnabled(true);
-                                    generateCaptionsButton.setEnabled(true);
-                                });
-                            }
-                        });
+                captions = null;
+                captionGroups = null;
+                wordSlotBefore.setText("");
+                wordSlotActive.setText("");
+                wordSlotAfter.setText("");
+                extractAudio(videoUri, requestId);
             }
+        });
+
+        exportButton.setOnClickListener(v -> {
+            if (captions == null || captions.isEmpty() || videoUri == null) {
+                statusText.setText("Generate captions before exporting");
+                return;
+            }
+            exportButton.setEnabled(false);
+            generateCaptionsButton.setEnabled(false);
+
+            int previewWidthPx = videoPreviewContainer.getWidth();
+            int previewHeightPx = videoPreviewContainer.getHeight();
+
+            CaptionSlotTransform beforeTransform = new CaptionSlotTransform(
+                    wordSlotBefore.getTranslationX(), wordSlotBefore.getTranslationY(),
+                    beforeSlotGesture.getScale());
+            CaptionSlotTransform activeTransform = new CaptionSlotTransform(
+                    wordSlotActive.getTranslationX(), wordSlotActive.getTranslationY(),
+                    activeSlotGesture.getScale());
+            CaptionSlotTransform afterTransform = new CaptionSlotTransform(
+                    wordSlotAfter.getTranslationX(), wordSlotAfter.getTranslationY(),
+                    afterSlotGesture.getScale());
+
+            VideoExporter.export(
+                    MainActivity.this,
+                    videoUri,
+                    captions,
+                    selectedFontOption,
+                    selectedFontSizeSp,
+                    selectedColor,
+                    selectedBoxColor,
+                    selectedStyle,
+                    previewWidthPx,
+                    previewHeightPx,
+                    beforeTransform,
+                    activeTransform,
+                    afterTransform,
+                    new VideoExporter.ExportCallback() {
+                        @Override
+                        public void onProgress(String message) {
+                            runOnUiThread(() -> statusText.setText(message));
+                        }
+
+                        @Override
+                        public void onSuccess(Uri savedUri) {
+                            runOnUiThread(() -> {
+                                statusText.setText("Saved to gallery!");
+                                exportButton.setEnabled(true);
+                                generateCaptionsButton.setEnabled(true);
+                            });
+                        }
+
+                        @Override
+                        public void onError(String message) {
+                            runOnUiThread(() -> {
+                                statusText.setText(message);
+                                exportButton.setEnabled(true);
+                                generateCaptionsButton.setEnabled(true);
+                            });
+                        }
+                    });
         });
     }
 
@@ -298,8 +315,7 @@ public class MainActivity extends AppCompatActivity {
                     this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     == PackageManager.PERMISSION_GRANTED;
             if (!granted) {
-                storagePermissionLauncher.launch(
-                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
+                storagePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE);
             }
         }
     }
@@ -324,9 +340,7 @@ public class MainActivity extends AppCompatActivity {
                 wordSlotAfter.setTypeface(selectedTypeface);
             }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
     }
 
@@ -350,9 +364,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
     }
 
@@ -370,15 +382,9 @@ public class MainActivity extends AppCompatActivity {
                 selectedStyle = styles[position].type;
             }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
         });
     }
-
-    // ---------------------------------------------------------------
-    // Color pickers
-    // ---------------------------------------------------------------
 
     private int colorToHue(int color) {
         float[] hsv = new float[3];
@@ -386,10 +392,6 @@ public class MainActivity extends AppCompatActivity {
         return Math.round(hsv[0]);
     }
 
-    /** Hue-only picker: saturation and brightness are locked to 100%,
-     * so the user can never accidentally pick a washed-out/dull color.
-     * Used for the global highlight color and every per-word override —
-     * this is what guarantees highlight colors stay sharp and bright. */
     private void showHueColorPickerDialog(String title, int initialColor, ColorPickCallback callback) {
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
@@ -430,10 +432,6 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    /** Box-background picker: unlike the highlight picker this allows
-     * dark/desaturated shades and transparency, since a caption box
-     * background is usually black/dark rather than a bright accent
-     * color. Hue + Brightness + Opacity are all user-controlled. */
     private void showBoxColorPickerDialog(int initialColor, ColorPickCallback callback) {
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
@@ -519,10 +517,6 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    /** Lists every recognized word with its current highlight swatch;
-     * tapping a swatch opens the hue picker scoped to that single
-     * Caption, setting Caption.customColor so each word's color can be
-     * changed completely independently of the others. */
     private void showWordColorEditorDialog() {
         if (captions == null || captions.isEmpty()) {
             statusText.setText("Generate captions first");
@@ -577,20 +571,13 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    // ---------------------------------------------------------------
-    // Video / caption pipeline
-    // ---------------------------------------------------------------
-
     private void handlePickedVideo(Intent data) {
-
         videoUri = data.getData();
-
         if (videoUri != null) {
             try {
                 getContentResolver().takePersistableUriPermission(
                         videoUri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            } catch (SecurityException ignored) {
-            }
+            } catch (SecurityException ignored) {}
         }
 
         currentRequestId = requestIdGenerator.incrementAndGet();
@@ -603,192 +590,128 @@ public class MainActivity extends AppCompatActivity {
         exportButton.setEnabled(false);
 
         playVideo(videoUri);
-
         statusText.setText("Video loaded. Tap 'Generate Captions' to continue.");
         generateCaptionsButton.setEnabled(true);
     }
 
     private void extractAudio(Uri uri, int requestId) {
-
         statusText.setText("Extracting audio...");
 
         AudioExtractor.extractAudioToWav(
                 this,
                 uri,
                 new AudioExtractor.ExtractCallback() {
-
                     @Override
                     public void onSuccess(File wavFile) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != currentRequestId) {
-                                    wavFile.delete();
-                                    return;
-                                }
-                                if (extractedWavFile != null
-                                        && !extractedWavFile.equals(wavFile)) {
-                                    extractedWavFile.delete();
-                                }
-                                extractedWavFile = wavFile;
-                                setupModelAndRecognize(wavFile, requestId);
+                        runOnUiThread(() -> {
+                            if (requestId != currentRequestId) {
+                                wavFile.delete();
+                                return;
                             }
+                            if (extractedWavFile != null && !extractedWavFile.equals(wavFile)) {
+                                extractedWavFile.delete();
+                            }
+                            extractedWavFile = wavFile;
+                            setupModelAndRecognize(wavFile, requestId);
                         });
                     }
 
                     @Override
                     public void onError(String message) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != currentRequestId) {
-                                    return;
-                                }
-                                statusText.setText(message);
-                                generateCaptionsButton.setEnabled(true);
-                            }
+                        runOnUiThread(() -> {
+                            if (requestId != currentRequestId) return;
+                            statusText.setText(message);
+                            generateCaptionsButton.setEnabled(true);
                         });
                     }
                 });
     }
 
     private void setupModelAndRecognize(File wavFile, int requestId) {
-
         ModelManager.downloadAndSetupModel(
                 this,
                 new ModelManager.ModelCallback() {
-
                     @Override
                     public void onProgress(String message) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != currentRequestId) {
-                                    return;
-                                }
-                                statusText.setText(message);
-                            }
+                        runOnUiThread(() -> {
+                            if (requestId != currentRequestId) return;
+                            statusText.setText(message);
                         });
                     }
 
                     @Override
                     public void onSuccess(File modelDir) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != currentRequestId) {
-                                    return;
-                                }
-                                runSpeechRecognition(modelDir, wavFile, requestId);
-                            }
+                        runOnUiThread(() -> {
+                            if (requestId != currentRequestId) return;
+                            runSpeechRecognition(modelDir, wavFile, requestId);
                         });
                     }
 
                     @Override
                     public void onError(String message) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != currentRequestId) {
-                                    return;
-                                }
-                                statusText.setText(message);
-                                generateCaptionsButton.setEnabled(true);
-                            }
+                        runOnUiThread(() -> {
+                            if (requestId != currentRequestId) return;
+                            statusText.setText(message);
+                            generateCaptionsButton.setEnabled(true);
                         });
                     }
                 });
     }
 
     private void runSpeechRecognition(File modelDir, File wavFile, int requestId) {
-
         SpeechToText.recognize(
                 modelDir,
                 wavFile,
                 new SpeechToText.ResultCallback() {
-
                     @Override
                     public void onProgress(String message) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != currentRequestId) {
-                                    return;
-                                }
-                                statusText.setText(message);
-                            }
+                        runOnUiThread(() -> {
+                            if (requestId != currentRequestId) return;
+                            statusText.setText(message);
                         });
                     }
 
                     @Override
                     public void onSuccess(List<String> jsonResults) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != currentRequestId) {
-                                    return;
-                                }
-                                captions = CaptionParser.parseVoskResults(jsonResults);
-                                captionGroups = CaptionGrouper.group(captions, CAPTION_GROUP_SIZE);
-                                statusText.setText(
-                                        "Captions ready! (" + captions.size() + " words)");
-                                generateCaptionsButton.setEnabled(true);
-                                exportButton.setEnabled(true);
-                                startCaptionUpdates();
-                            }
+                        runOnUiThread(() -> {
+                            if (requestId != currentRequestId) return;
+                            captions = CaptionParser.parseVoskResults(jsonResults);
+                            captionGroups = CaptionGrouper.group(captions, CAPTION_GROUP_SIZE);
+                            statusText.setText("Captions ready! (" + captions.size() + " words)");
+                            generateCaptionsButton.setEnabled(true);
+                            exportButton.setEnabled(true);
+                            startCaptionUpdates();
                         });
                     }
 
                     @Override
                     public void onError(String message) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (requestId != currentRequestId) {
-                                    return;
-                                }
-                                statusText.setText(message);
-                                generateCaptionsButton.setEnabled(true);
-                            }
+                        runOnUiThread(() -> {
+                            if (requestId != currentRequestId) return;
+                            statusText.setText(message);
+                            generateCaptionsButton.setEnabled(true);
                         });
                     }
                 });
     }
 
-    // ---------------------------------------------------------------
-    // Caption rendering
-    // ---------------------------------------------------------------
-
     private Object buildActiveWordSpan(int color) {
         switch (selectedStyle) {
             case HIGHLIGHT_POP:
-                // Fixed sharp/bright accent — kept in sync with
-                // AssSubtitleBuilder.HIGHLIGHT_POP_COLOR for export parity.
                 return new android.text.style.ForegroundColorSpan(0xFFFF3D00);
-
             case GREEN_EMPHASIS:
-                // Kept in sync with AssSubtitleBuilder.GREEN_EMPHASIS_COLOR.
                 return new android.text.style.ForegroundColorSpan(0xFF00E676);
-
             case KARAOKE_FLOW:
                 return new KaraokeFillSpan(0xFFFFFFFF, color, 8f);
-
             case ONE_WORD_PUNCH:
                 return new PopScaleSpan(color, 1.8f);
-
             case BOX_HIGHLIGHT:
-                // Text color is this word's resolved highlight color;
-                // box background is the user's independently-chosen
-                // selectedBoxColor.
                 return new BackgroundBoxSpan(color, selectedBoxColor, 12f, 16f);
-
             case BOUNCE:
                 return new BounceSpan(color);
-
             case GLOW_POP:
                 int glowColor = (color & 0x00FFFFFF) | 0x80000000;
                 return new GlowPopSpan(color, glowColor, 1.15f, 5f);
-
             case MINIMAL_CLEAN:
             default:
                 return null;
@@ -839,84 +762,76 @@ public class MainActivity extends AppCompatActivity {
         slot.setText(spannable);
     }
 
-    // Measures how wide a slot's current text actually renders,
-    // including its own left/right padding.
     private float measureSlotWidth(TextView slot) {
         CharSequence text = slot.getText();
-        if (text == null || text.length() == 0) {
-            return 0f;
-        }
+        if (text == null || text.length() == 0) return 0f;
         return slot.getPaint().measureText(text, 0, text.length())
                 + slot.getPaddingLeft() + slot.getPaddingRight();
     }
 
-    // Places before/active/after slots side-by-side based on their
-    // actual measured width, with a small fixed gap — only for slots the
-    // user hasn't manually dragged. Prevents overlap on long words and
-    // excess empty gap on short words.
     private void autoSpaceSlots() {
         float gap = dpToPx(8);
-
         float activeWidth = measureSlotWidth(wordSlotActive);
 
         if (!activeSlotGesture.isPositionDragged()) {
             wordSlotActive.setTranslationX(0f);
         }
-
         if (!beforeSlotGesture.isPositionDragged()) {
             float beforeWidth = measureSlotWidth(wordSlotBefore);
             wordSlotBefore.setTranslationX(-(activeWidth / 2f + gap + beforeWidth / 2f));
         }
-
         if (!afterSlotGesture.isPositionDragged()) {
             float afterWidth = measureSlotWidth(wordSlotAfter);
             wordSlotAfter.setTranslationX(activeWidth / 2f + gap + afterWidth / 2f);
         }
     }
 
-    // FIX: uses fixed 3-word CaptionGrouper blocks instead of a sliding
-    // window recomputed from the globally active word. The three slots
-    // now map 1:1 to a stable group's word[0]/word[1]/word[2]; only
-    // which slot is "active" (highlighted) changes as playback moves
-    // through the group. This is what stops captions from appearing to
-    // type out one word at a time.
     private void startCaptionUpdates() {
         captionUpdateRunnable = new Runnable() {
             @Override
             public void run() {
-                if (mediaPlayer != null && mediaPlayer.isPlaying()
-                        && captionGroups != null && !captionGroups.isEmpty()) {
+                if (mediaPlayer != null) {
+                    int currentPos = mediaPlayer.getCurrentPosition();
+                    int duration = mediaPlayer.getDuration();
 
-                    float currentTimeSec = mediaPlayer.getCurrentPosition() / 1000.0f;
-                    int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
+                    if (!isTrackingTouch && duration > 0) {
+                        videoSeekBar.setMax(duration);
+                        videoSeekBar.setProgress(currentPos);
+                        int s = currentPos / 1000;
+                        timeText.setText(String.format(java.util.Locale.US, "%02d:%02d", s / 60, s % 60));
+                    }
 
-                    if (groupIndex != -1) {
-                        CaptionGrouper.Group group = captionGroups.get(groupIndex);
-                        int activeIndex = group.nearestIndexAt(currentTimeSec);
+                    if (mediaPlayer.isPlaying() && captionGroups != null && !captionGroups.isEmpty()) {
+                        float currentTimeSec = currentPos / 1000.0f;
+                        int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
 
-                        boolean oneWordPunch = selectedStyle
-                                == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
+                        if (groupIndex != -1) {
+                            CaptionGrouper.Group group = captionGroups.get(groupIndex);
+                            int activeIndex = group.nearestIndexAt(currentTimeSec);
 
-                        if (oneWordPunch) {
-                            wordSlotBefore.setText("");
-                            applySlotStyle(wordSlotActive, group.words.get(activeIndex), true);
-                            wordSlotAfter.setText("");
-                        } else {
-                            TextView[] slots = { wordSlotBefore, wordSlotActive, wordSlotAfter };
-                            for (int slotPos = 0; slotPos < slots.length; slotPos++) {
-                                if (slotPos >= group.words.size()) {
-                                    slots[slotPos].setText("");
-                                } else {
-                                    applySlotStyle(slots[slotPos], group.words.get(slotPos),
-                                            slotPos == activeIndex);
+                            boolean oneWordPunch = selectedStyle
+                                    == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
+
+                            if (oneWordPunch) {
+                                wordSlotBefore.setText("");
+                                applySlotStyle(wordSlotActive, group.words.get(activeIndex), true);
+                                wordSlotAfter.setText("");
+                            } else {
+                                TextView[] slots = { wordSlotBefore, wordSlotActive, wordSlotAfter };
+                                for (int slotPos = 0; slotPos < slots.length; slotPos++) {
+                                    if (slotPos >= group.words.size()) {
+                                        slots[slotPos].setText("");
+                                    } else {
+                                        applySlotStyle(slots[slotPos], group.words.get(slotPos),
+                                                slotPos == activeIndex);
+                                    }
                                 }
                             }
+                            autoSpaceSlots();
                         }
-
-                        autoSpaceSlots();
                     }
                 }
-                captionUpdateHandler.postDelayed(this, 100);
+                captionUpdateHandler.postDelayed(this, 50);
             }
         };
         captionUpdateHandler.post(captionUpdateRunnable);
@@ -939,25 +854,21 @@ public class MainActivity extends AppCompatActivity {
             mediaPlayer.setDataSource(this, uri);
             mediaPlayer.setDisplay(surfaceHolder);
 
-            mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
-                @Override
-                public void onPrepared(MediaPlayer mp) {
-                    int vw = mp.getVideoWidth();
-                    int vh = mp.getVideoHeight();
-                    if (vw > 0 && vh > 0) {
-                        videoPreviewContainer.setAspectRatio(vw, vh);
-                    }
-                    mp.setLooping(true);
-                    mp.start();
+            mediaPlayer.setOnPreparedListener(mp -> {
+                int vw = mp.getVideoWidth();
+                int vh = mp.getVideoHeight();
+                if (vw > 0 && vh > 0) {
+                    videoPreviewContainer.setAspectRatio(vw, vh);
                 }
+                videoSeekBar.setMax(mp.getDuration());
+                playPauseButton.setText("Pause");
+                mp.setLooping(true);
+                mp.start();
             });
 
-            mediaPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
-                @Override
-                public boolean onError(MediaPlayer mp, int what, int extra) {
-                    statusText.setText("Playback error");
-                    return true;
-                }
+            mediaPlayer.setOnErrorListener((mp, what, extra) -> {
+                statusText.setText("Playback error");
+                return true;
             });
 
             mediaPlayer.prepareAsync();
@@ -970,18 +881,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-
         stopCaptionUpdates();
-
         if (mediaPlayer != null) {
             mediaPlayer.release();
             mediaPlayer = null;
         }
-
         if (extractedWavFile != null) {
             extractedWavFile.delete();
         }
-
         SpeechToText.releaseModel();
     }
 }
