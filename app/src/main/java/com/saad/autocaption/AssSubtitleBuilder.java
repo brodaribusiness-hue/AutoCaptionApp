@@ -14,11 +14,10 @@ public class AssSubtitleBuilder {
             int videoHeight,
             int previewWidthPx,
             int previewHeightPx,
-            String fontName,
             float fontSizeSp,
-            int highlightColor,
-            int boxBackgroundColor,
-            CaptionStyleOptions.CaptionStyleType style,
+            SlotStyleConfig configBefore,
+            SlotStyleConfig configActive,
+            SlotStyleConfig configAfter,
             CaptionSlotTransform beforeSlot,
             CaptionSlotTransform activeSlot,
             CaptionSlotTransform afterSlot) {
@@ -31,7 +30,9 @@ public class AssSubtitleBuilder {
         int assFontSize = Math.round(fontSizeSp * scaleFactor);
 
         String outlineColor = toAssColor(0xFF000000);
-        String boxAss = toAssColor(boxBackgroundColor);
+        String beforeBoxAss = toAssColor(configBefore.boxColor);
+        String activeBoxAss = toAssColor(configActive.boxColor);
+        String afterBoxAss = toAssColor(configAfter.boxColor);
 
         sb.append("[V4+ Styles]\n");
         sb.append("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
@@ -39,13 +40,23 @@ public class AssSubtitleBuilder {
                 + "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
                 + "Alignment, MarginL, MarginR, MarginV, Encoding\n");
 
+        // Base styles for default outlines
         sb.append(String.format(Locale.US,
                 "Style: Default,%s,%d,&HFFFFFF&,&HFFFFFF&,%s,%s,0,0,0,0,100,100,0,0,1,2,0,2,20,20,20,1\n",
-                fontName, assFontSize, outlineColor, outlineColor));
+                configActive.fontOption.exportFamilyName, assFontSize, outlineColor, outlineColor));
+
+        // Independent Box styles for each slot
+        sb.append(String.format(Locale.US,
+                "Style: BoxBefore,%s,%d,&HFFFFFF&,&HFFFFFF&,%s,%s,0,0,0,0,100,100,0,0,3,14,0,2,20,20,20,1\n",
+                configBefore.fontOption.exportFamilyName, assFontSize, outlineColor, beforeBoxAss));
 
         sb.append(String.format(Locale.US,
-                "Style: BoxHighlight,%s,%d,&HFFFFFF&,&HFFFFFF&,%s,%s,0,0,0,0,100,100,0,0,3,14,0,2,20,20,20,1\n\n",
-                fontName, assFontSize, outlineColor, boxAss));
+                "Style: BoxActive,%s,%d,&HFFFFFF&,&HFFFFFF&,%s,%s,0,0,0,0,100,100,0,0,3,14,0,2,20,20,20,1\n",
+                configActive.fontOption.exportFamilyName, assFontSize, outlineColor, activeBoxAss));
+
+        sb.append(String.format(Locale.US,
+                "Style: BoxAfter,%s,%d,&HFFFFFF&,&HFFFFFF&,%s,%s,0,0,0,0,100,100,0,0,3,14,0,2,20,20,20,1\n\n",
+                configAfter.fontOption.exportFamilyName, assFontSize, outlineColor, afterBoxAss));
 
         sb.append("[Events]\n");
         sb.append("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n");
@@ -56,8 +67,7 @@ public class AssSubtitleBuilder {
         int baseX = videoWidth / 2;
         int baseY = videoHeight - Math.round(videoHeight * 0.06f);
 
-        boolean oneWordPunch = style == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
-        boolean boxHighlight = style == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
+        boolean oneWordPunch = configActive.styleType == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
 
         List<CaptionGrouper.Group> groups = CaptionGrouper.group(captions, GROUP_SIZE);
 
@@ -69,24 +79,40 @@ public class AssSubtitleBuilder {
                 String startTime = toAssTime(activeCap.startTime);
                 String endTime = toAssTime(activeCap.endTime);
 
+                // Slot 1 (Before)
                 if (!oneWordPunch && j - 1 >= 0) {
-                    appendWordLine(sb, startTime, endTime, words.get(j - 1).word,
+                    Caption beforeCap = words.get(j - 1);
+                    int beforeColor = (beforeCap.customColor != 0) ? beforeCap.customColor : configBefore.textColor;
+                    String beforeColorAss = toAssColor(beforeColor);
+                    String beforeTag = buildWordStyleTag(configBefore.styleType, beforeColorAss, configBefore.fontOption.exportFamilyName);
+                    String beforeStyle = (configBefore.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT) ? "BoxBefore" : "Default";
+
+                    appendWordLine(sb, startTime, endTime, beforeCap.word,
                             beforeSlot, baseX, baseY, previewToVideoX, previewToVideoY,
-                            "\\c&HCCCCCC&", "Default");
+                            beforeTag, beforeStyle);
                 }
 
-                String wordHighlightAss = toAssColor(activeCap.resolveColor(highlightColor));
-                String activeColorTag = buildActiveWordColorTag(style, wordHighlightAss);
-                String activeStyleName = boxHighlight ? "BoxHighlight" : "Default";
+                // Slot 2 (Active)
+                int activeColor = (activeCap.customColor != 0) ? activeCap.customColor : configActive.textColor;
+                String activeColorAss = toAssColor(activeColor);
+                String activeTag = buildWordStyleTag(configActive.styleType, activeColorAss, configActive.fontOption.exportFamilyName);
+                String activeStyle = (configActive.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT) ? "BoxActive" : "Default";
 
                 appendWordLine(sb, startTime, endTime, activeCap.word,
                         activeSlot, baseX, baseY, previewToVideoX, previewToVideoY,
-                        activeColorTag, activeStyleName);
+                        activeTag, activeStyle);
 
+                // Slot 3 (After)
                 if (!oneWordPunch && j + 1 < words.size()) {
-                    appendWordLine(sb, startTime, endTime, words.get(j + 1).word,
+                    Caption afterCap = words.get(j + 1);
+                    int afterColor = (afterCap.customColor != 0) ? afterCap.customColor : configAfter.textColor;
+                    String afterColorAss = toAssColor(afterColor);
+                    String afterTag = buildWordStyleTag(configAfter.styleType, afterColorAss, configAfter.fontOption.exportFamilyName);
+                    String afterStyle = (configAfter.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT) ? "BoxAfter" : "Default";
+
+                    appendWordLine(sb, startTime, endTime, afterCap.word,
                             afterSlot, baseX, baseY, previewToVideoX, previewToVideoY,
-                            "\\c&HCCCCCC&", "Default");
+                            afterTag, afterStyle);
                 }
             }
         }
@@ -97,7 +123,7 @@ public class AssSubtitleBuilder {
     private static void appendWordLine(
             StringBuilder sb, String startTime, String endTime, String word,
             CaptionSlotTransform slot, int baseX, int baseY,
-            float previewToVideoX, float previewToVideoY, String colorTag,
+            float previewToVideoX, float previewToVideoY, String styleTag,
             String styleName) {
 
         int posX = baseX + Math.round(slot.translationX * previewToVideoX);
@@ -108,32 +134,32 @@ public class AssSubtitleBuilder {
                 .append(",").append(styleName).append(",,0,0,0,,")
                 .append("{\\pos(").append(posX).append(",").append(posY).append(")")
                 .append("\\fscx").append(scalePercent).append("\\fscy").append(scalePercent)
-                .append(colorTag).append("}")
+                .append(styleTag).append("}")
                 .append(word).append("\n");
     }
 
-    private static String buildActiveWordColorTag(
-            CaptionStyleOptions.CaptionStyleType style, String highlightAss) {
+    private static String buildWordStyleTag(
+            CaptionStyleOptions.CaptionStyleType style, String colorAss, String fontName) {
+        String base = "\\fn" + fontName;
         switch (style) {
             case GREEN_EMPHASIS:
-                return "\\c" + toAssColor(GREEN_EMPHASIS_COLOR) + "\\b1";
+                return base + "\\c" + toAssColor(GREEN_EMPHASIS_COLOR) + "\\b1";
             case HIGHLIGHT_POP:
-                // FIX: Dynamic color support for Highlight Pop
-                return "\\c" + highlightAss + "\\fscx115\\fscy115\\b1";
+                return base + "\\c" + colorAss + "\\fscx115\\fscy115\\b1";
             case MINIMAL_CLEAN:
-                return "\\c&HFFFFFF&\\b1";
+                return base + "\\c" + colorAss + "\\b1";
             case GLOW_POP:
-                return "\\c" + highlightAss + "\\blur6";
+                return base + "\\c" + colorAss + "\\blur6";
             case BOX_HIGHLIGHT:
-                return "\\c" + highlightAss + "\\bord3\\shad4";
+                return base + "\\c" + colorAss + "\\bord3\\shad4";
             case BOUNCE:
-                return "\\c" + highlightAss + "\\t(0,250,\\fscx120\\fscy120)\\t(250,500,\\fscx100\\fscy100)";
+                return base + "\\c" + colorAss + "\\t(0,250,\\fscx120\\fscy120)\\t(250,500,\\fscx100\\fscy100)";
             case KARAOKE_FLOW:
-                return "\\c" + highlightAss + "\\k50";
+                return base + "\\c" + colorAss + "\\k50";
             case ONE_WORD_PUNCH:
-                return "\\c" + highlightAss + "\\fscx160\\fscy160\\b1";
+                return base + "\\c" + colorAss + "\\fscx160\\fscy160\\b1";
             default:
-                return "\\c" + highlightAss;
+                return base + "\\c" + colorAss;
         }
     }
 
