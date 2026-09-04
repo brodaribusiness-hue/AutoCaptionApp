@@ -15,12 +15,13 @@ import java.util.List;
 public class SpeechToText {
 
     public interface ResultCallback {
-        void onProgress(String message);
-        // FIX: was a single String; now returns EVERY utterance's JSON
-        // result, since Vosk emits one JSON chunk per detected pause,
-        // not one JSON for the whole file.
-        void onSuccess(List<String> jsonResults);
-        void onError(String message);
+    void onProgress(String message);
+    // FIX: was a single String; now returns EVERY utterance's JSON
+    // result, since Vosk emits one JSON chunk per detected pause,
+    // not one JSON for the whole file.
+    void onSuccess(List<String> jsonResults);
+    void onError(String message);
+}
     }
 
     private static Model cachedModel;
@@ -89,10 +90,11 @@ public class SpeechToText {
                     List<String> jsonResults = new ArrayList<>();
 
                     while ((bytesRead = inputStream.read(buffer)) >= 0) {
-                        boolean utteranceComplete =
-                                finalRecognizer.acceptWaveForm(buffer, bytesRead);
-                        if (utteranceComplete) {
-                            jsonResults.add(finalRecognizer.getResult());
+    boolean utteranceComplete =
+            finalRecognizer.acceptWaveForm(buffer, bytesRead);
+    if (utteranceComplete) {
+        jsonResults.add(finalRecognizer.getResult());
+    }
                         }
 
                         bytesProcessed += bytesRead;
