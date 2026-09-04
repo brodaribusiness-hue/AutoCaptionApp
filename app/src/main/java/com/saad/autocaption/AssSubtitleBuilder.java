@@ -6,7 +6,6 @@ import java.util.Locale;
 public class AssSubtitleBuilder {
 
     private static final int GROUP_SIZE = CaptionGrouper.DEFAULT_GROUP_SIZE;
-    private static final int HIGHLIGHT_POP_COLOR = 0xFFFF3D00;
     private static final int GREEN_EMPHASIS_COLOR = 0xFF00E676;
 
     public static String build(
@@ -119,7 +118,8 @@ public class AssSubtitleBuilder {
             case GREEN_EMPHASIS:
                 return "\\c" + toAssColor(GREEN_EMPHASIS_COLOR) + "\\b1";
             case HIGHLIGHT_POP:
-                return "\\c" + toAssColor(HIGHLIGHT_POP_COLOR) + "\\b1";
+                // FIX: Dynamic color support for Highlight Pop
+                return "\\c" + highlightAss + "\\fscx115\\fscy115\\b1";
             case MINIMAL_CLEAN:
                 return "\\c&HFFFFFF&\\b1";
             case GLOW_POP:
