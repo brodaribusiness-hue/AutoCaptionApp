@@ -6,9 +6,6 @@ import java.util.Locale;
 public class AssSubtitleBuilder {
 
     private static final int GROUP_SIZE = CaptionGrouper.DEFAULT_GROUP_SIZE;
-
-    // Kept identical to MainActivity's preset colors so the exported
-    // video always matches the live preview exactly.
     private static final int HIGHLIGHT_POP_COLOR = 0xFFFF3D00;
     private static final int GREEN_EMPHASIS_COLOR = 0xFF00E676;
 
@@ -43,16 +40,10 @@ public class AssSubtitleBuilder {
                 + "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
                 + "Alignment, MarginL, MarginR, MarginV, Encoding\n");
 
-        // Default style: plain outlined text (used for non-active words
-        // and every style except Box Highlight).
         sb.append(String.format(Locale.US,
                 "Style: Default,%s,%d,&HFFFFFF&,&HFFFFFF&,%s,%s,0,0,0,0,100,100,0,0,1,2,0,2,20,20,20,1\n",
                 fontName, assFontSize, outlineColor, outlineColor));
 
-        // BoxHighlight style: BorderStyle=3 makes libass paint BackColour
-        // as a solid box behind the glyphs, sized by the Outline value
-        // (used here as box padding) — this is how the user's chosen
-        // box background color reaches the exported video.
         sb.append(String.format(Locale.US,
                 "Style: BoxHighlight,%s,%d,&HFFFFFF&,&HFFFFFF&,%s,%s,0,0,0,0,100,100,0,0,3,14,0,2,20,20,20,1\n\n",
                 fontName, assFontSize, outlineColor, boxAss));
@@ -60,9 +51,6 @@ public class AssSubtitleBuilder {
         sb.append("[Events]\n");
         sb.append("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n");
 
-        // \pos overrides the bottom-center anchor with an exact pixel
-        // position, mapped from the preview's on-screen pixels into the
-        // exported video's own resolution.
         float previewToVideoX = videoWidth / (float) Math.max(previewWidthPx, 1);
         float previewToVideoY = videoHeight / (float) Math.max(previewHeightPx, 1);
 
@@ -72,10 +60,6 @@ public class AssSubtitleBuilder {
         boolean oneWordPunch = style == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
         boolean boxHighlight = style == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
 
-        // Same fixed 3-word grouping used by the live preview
-        // (MainActivity), so exported captions never "type out" one
-        // word at a time — the same 3-word block stays on screen while
-        // only the highlight advances between words.
         List<CaptionGrouper.Group> groups = CaptionGrouper.group(captions, GROUP_SIZE);
 
         for (CaptionGrouper.Group group : groups) {
@@ -89,15 +73,13 @@ public class AssSubtitleBuilder {
                 if (!oneWordPunch && j - 1 >= 0) {
                     appendWordLine(sb, startTime, endTime, words.get(j - 1).word,
                             beforeSlot, baseX, baseY, previewToVideoX, previewToVideoY,
-                            "\\c&HFFFFFF&", "Default");
+                            "\\c&HCCCCCC&", "Default");
                 }
 
-                // Per-word color: each word can carry its own
-                // highlight override (Caption.customColor); falls back
-                // to the globally selected color when unset.
                 String wordHighlightAss = toAssColor(activeCap.resolveColor(highlightColor));
                 String activeColorTag = buildActiveWordColorTag(style, wordHighlightAss);
                 String activeStyleName = boxHighlight ? "BoxHighlight" : "Default";
+
                 appendWordLine(sb, startTime, endTime, activeCap.word,
                         activeSlot, baseX, baseY, previewToVideoX, previewToVideoY,
                         activeColorTag, activeStyleName);
@@ -105,7 +87,7 @@ public class AssSubtitleBuilder {
                 if (!oneWordPunch && j + 1 < words.size()) {
                     appendWordLine(sb, startTime, endTime, words.get(j + 1).word,
                             afterSlot, baseX, baseY, previewToVideoX, previewToVideoY,
-                            "\\c&HFFFFFF&", "Default");
+                            "\\c&HCCCCCC&", "Default");
                 }
             }
         }
@@ -135,18 +117,21 @@ public class AssSubtitleBuilder {
             CaptionStyleOptions.CaptionStyleType style, String highlightAss) {
         switch (style) {
             case GREEN_EMPHASIS:
-                return "\\c" + toAssColor(GREEN_EMPHASIS_COLOR);
+                return "\\c" + toAssColor(GREEN_EMPHASIS_COLOR) + "\\b1";
             case HIGHLIGHT_POP:
-                return "\\c" + toAssColor(HIGHLIGHT_POP_COLOR);
+                return "\\c" + toAssColor(HIGHLIGHT_POP_COLOR) + "\\b1";
             case MINIMAL_CLEAN:
-                return "\\c&HFFFFFF&";
+                return "\\c&HFFFFFF&\\b1";
             case GLOW_POP:
-                return "\\c" + highlightAss + "\\blur4";
+                return "\\c" + highlightAss + "\\blur6";
             case BOX_HIGHLIGHT:
-                // \bord/\shad on top of the BoxHighlight style gives a
-                // subtle raised/3D pop to match the preview's extruded
-                // text effect within what libass can render.
                 return "\\c" + highlightAss + "\\bord3\\shad4";
+            case BOUNCE:
+                return "\\c" + highlightAss + "\\t(0,250,\\fscx120\\fscy120)\\t(250,500,\\fscx100\\fscy100)";
+            case KARAOKE_FLOW:
+                return "\\c" + highlightAss + "\\k50";
+            case ONE_WORD_PUNCH:
+                return "\\c" + highlightAss + "\\fscx160\\fscy160\\b1";
             default:
                 return "\\c" + highlightAss;
         }
