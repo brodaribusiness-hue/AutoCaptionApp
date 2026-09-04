@@ -67,21 +67,6 @@
 
             </FrameLayout>
 
-            <!-- NEW: Play/Pause overlay button, bottom-start corner of the
-                 video so it never sits on top of the caption slots. -->
-            <Button
-                android:id="@+id/playPauseButton"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:layout_gravity="bottom|start"
-                android:layout_margin="8dp"
-                android:text="II"
-                android:textColor="#FFFFFF"
-                android:textStyle="bold"
-                android:background="#AA000000"
-                android:insetTop="0dp"
-                android:insetBottom="0dp" />
-
         </com.saad.autocaption.AspectRatioFrameLayout>
 
         <Button
@@ -162,6 +147,23 @@
             android:background="#1E1E1E"
             android:popupBackground="#1E1E1E"
             android:layout_marginTop="4dp" />
+
+        <!-- NEW: only meaningful for Box Highlight style, but always
+             visible/accessible; harmless no-op for other styles. -->
+        <Button
+            android:id="@+id/boxColorButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Box Background Color"
+            android:layout_marginTop="12dp" />
+
+        <!-- NEW: per-word independent color override editor. -->
+        <Button
+            android:id="@+id/editWordColorsButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Edit Word Colors"
+            android:layout_marginTop="10dp" />
 
         <TextView
             android:id="@+id/statusText"
