@@ -1,23 +1,18 @@
 package com.saad.autocaption;
-
 import android.content.Context;
 import android.graphics.Typeface;
 import android.view.Gravity;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-
 public class CaptionStyleOptions {
-
     public static class FontOption {
         public final String label;
         public final String assetFileName; // null = built-in system font
         public final Typeface builtInTypeface;
         public final String exportFamilyName; // family name written into the .ass file
         public final String systemFontFile;   // filename under /system/fonts (null for custom fonts)
-
         FontOption(String label, String assetFileName, Typeface builtInTypeface,
                    String exportFamilyName, String systemFontFile) {
             this.label = label;
@@ -26,58 +21,47 @@ public class CaptionStyleOptions {
             this.exportFamilyName = exportFamilyName;
             this.systemFontFile = systemFontFile;
         }
-
         @Override
         public String toString() {
             return label;
         }
     }
-
     public static class ColorOption {
         public final String label;
         public final int color;
-
         ColorOption(String label, int color) {
             this.label = label;
             this.color = color;
         }
-
         @Override
         public String toString() {
             return label;
         }
     }
-
     public static class FontSizeOption {
         public final String label;
         public final float sizeSp;
-
         FontSizeOption(String label, float sizeSp) {
             this.label = label;
             this.sizeSp = sizeSp;
         }
-
         @Override
         public String toString() {
             return label;
         }
     }
-
     public static class PositionOption {
         public final String label;
         public final int gravity;
-
         PositionOption(String label, int gravity) {
             this.label = label;
             this.gravity = gravity;
         }
-
         @Override
         public String toString() {
             return label;
         }
     }
-
     public enum CaptionStyleType {
         HIGHLIGHT_POP,
         GREEN_EMPHASIS,
@@ -88,22 +72,18 @@ public class CaptionStyleOptions {
         GLOW_POP,
         MINIMAL_CLEAN
     }
-
     public static class StyleOption {
         public final String label;
         public final CaptionStyleType type;
-
         StyleOption(String label, CaptionStyleType type) {
             this.label = label;
             this.type = type;
         }
-
         @Override
         public String toString() {
             return label;
         }
     }
-
     public static FontOption[] getFontOptions() {
         return new FontOption[]{
                 new FontOption("Modern", null, Typeface.SANS_SERIF,
@@ -124,20 +104,22 @@ public class CaptionStyleOptions {
                         "Blafhy Glibs", null),
         };
     }
-
+    // NEW: all preset swatches bumped to fully-saturated "Material
+    // Accent" shades so every preset reads as sharp/bright on video,
+    // matching the hue-only custom picker's guarantee of full
+    // saturation + full brightness.
     public static ColorOption[] getColorOptions() {
         return new ColorOption[]{
-                new ColorOption("Yellow", 0xFFFFEB3B),
+                new ColorOption("Yellow", 0xFFFFEA00),
                 new ColorOption("White", 0xFFFFFFFF),
-                new ColorOption("Red", 0xFFFF5252),
-                new ColorOption("Green", 0xFF4CAF50),
+                new ColorOption("Red", 0xFFFF1744),
+                new ColorOption("Green", 0xFF00E676),
                 new ColorOption("Cyan", 0xFF00E5FF),
-                new ColorOption("Pink", 0xFFFF4081),
-                new ColorOption("Orange", 0xFFFF9800),
+                new ColorOption("Pink", 0xFFF50057),
+                new ColorOption("Orange", 0xFFFF6D00),
                 new ColorOption("Custom...", 0),
         };
     }
-
     public static FontSizeOption[] getFontSizeOptions() {
         return new FontSizeOption[]{
                 new FontSizeOption("Small", 18f),
@@ -147,7 +129,6 @@ public class CaptionStyleOptions {
                 new FontSizeOption("Huge", 36f),
         };
     }
-
     public static PositionOption[] getPositionOptions() {
         return new PositionOption[]{
                 new PositionOption("Top", Gravity.TOP),
@@ -155,7 +136,6 @@ public class CaptionStyleOptions {
                 new PositionOption("Bottom", Gravity.BOTTOM),
         };
     }
-
     public static StyleOption[] getStyleOptions() {
         return new StyleOption[]{
                 new StyleOption("Highlight Pop", CaptionStyleType.HIGHLIGHT_POP),
@@ -168,7 +148,6 @@ public class CaptionStyleOptions {
                 new StyleOption("Minimal Clean", CaptionStyleType.MINIMAL_CLEAN),
         };
     }
-
     public static Typeface resolveTypeface(Context context, FontOption option) {
         if (option.assetFileName != null) {
             try {
@@ -180,7 +159,6 @@ public class CaptionStyleOptions {
         }
         return option.builtInTypeface;
     }
-
     /** Copies whichever font file the export needs (asset or system font)
      * into targetDir so ffmpeg's subtitle renderer can find it, and
      * returns the font family name to use in the .ass file. Falls back
@@ -190,7 +168,6 @@ public class CaptionStyleOptions {
         if (!targetDir.exists()) {
             targetDir.mkdirs();
         }
-
         if (option.assetFileName != null) {
             String baseName = option.assetFileName.substring(
                     option.assetFileName.lastIndexOf('/') + 1);
