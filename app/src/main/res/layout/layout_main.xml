@@ -69,6 +69,42 @@
 
         </com.saad.autocaption.AspectRatioFrameLayout>
 
+        <!-- Player Controls Bar -->
+        <LinearLayout
+            android:id="@+id/playerControlLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="8dp"
+            android:background="#1E1E1E"
+            android:layout_marginTop="6dp">
+
+            <Button
+                android:id="@+id/playPauseButton"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:text="Pause"
+                android:textSize="12sp"
+                android:textColor="#FFFFFF" />
+
+            <SeekBar
+                android:id="@+id/videoSeekBar"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/timeText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00"
+                android:textColor="#AAAAAA"
+                android:textSize="12sp" />
+        </LinearLayout>
+
         <Button
             android:id="@+id/selectVideoButton"
             android:layout_width="match_parent"
@@ -148,8 +184,6 @@
             android:popupBackground="#1E1E1E"
             android:layout_marginTop="4dp" />
 
-        <!-- NEW: only meaningful for Box Highlight style, but always
-             visible/accessible; harmless no-op for other styles. -->
         <Button
             android:id="@+id/boxColorButton"
             android:layout_width="match_parent"
@@ -157,7 +191,6 @@
             android:text="Box Background Color"
             android:layout_marginTop="12dp" />
 
-        <!-- NEW: per-word independent color override editor. -->
         <Button
             android:id="@+id/editWordColorsButton"
             android:layout_width="match_parent"
@@ -176,5 +209,4 @@
             android:layout_marginTop="20dp" />
 
     </LinearLayout>
-
 </ScrollView>
