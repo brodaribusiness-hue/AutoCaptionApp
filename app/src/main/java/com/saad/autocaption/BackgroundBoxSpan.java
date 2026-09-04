@@ -9,51 +9,60 @@ import android.text.style.ReplacementSpan;
 public class BackgroundBoxSpan extends ReplacementSpan {
     private final int textColor;
     private final int boxColor;
-    private final float paddingPx;
-    private final float cornerRadiusPx;
+    private final float horizontalPadding;
+    private final float verticalPadding;
+    private final float cornerRadius;
 
     public BackgroundBoxSpan(int textColor, int boxColor, float paddingPx, float cornerRadiusPx) {
         this.textColor = textColor;
         this.boxColor = boxColor;
-        this.paddingPx = paddingPx;
-        this.cornerRadiusPx = cornerRadiusPx;
+        this.horizontalPadding = paddingPx;
+        this.verticalPadding = paddingPx * 0.55f;
+        this.cornerRadius = cornerRadiusPx;
     }
 
     @Override
     public int getSize(Paint paint, CharSequence text, int start, int end, Paint.FontMetricsInt fm) {
         if (fm != null) {
-            int extra = Math.round(paddingPx);
+            int extra = Math.round(verticalPadding);
             fm.ascent -= extra;
             fm.top -= extra;
             fm.descent += extra;
             fm.bottom += extra;
         }
-        return Math.round(paint.measureText(text, start, end) + paddingPx * 2);
+        return Math.round(paint.measureText(text, start, end) + (horizontalPadding * 2f));
     }
 
     @Override
     public void draw(Canvas canvas, CharSequence text, int start, int end, float x, int top, int y, int bottom, Paint paint) {
-        float width = paint.measureText(text, start, end);
-        RectF rect = new RectF(x, top - (paddingPx / 2f), x + width + (paddingPx * 2f), bottom + (paddingPx / 2f));
+        float textWidth = paint.measureText(text, start, end);
+        float boxWidth = textWidth + (horizontalPadding * 2f);
+
+        // Calculate bounded rect for background box
+        RectF rect = new RectF(x, top, x + boxWidth, bottom);
 
         int originalColor = paint.getColor();
         Paint.Style originalStyle = paint.getStyle();
 
-        // 1. Draw rounded box background
+        // 1. Draw rounded box
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(boxColor);
-        canvas.drawRoundRect(rect, cornerRadiusPx, cornerRadiusPx, paint);
+        canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint);
 
-        // 2. Text depth shadow
+        // 2. Strict baseline vertical and horizontal centering calculation
+        float textX = x + horizontalPadding;
+        float textY = rect.centerY() - ((paint.descent() + paint.ascent()) / 2f);
+
+        // 3. Subtle shadow depth
         float[] hsv = new float[3];
         Color.colorToHSV(textColor, hsv);
         int depthColor = Color.HSVToColor(new float[]{hsv[0], hsv[1], Math.max(hsv[2] * 0.35f, 0.08f)});
         paint.setColor(depthColor);
-        canvas.drawText(text, start, end, x + paddingPx + 2f, y + 2f, paint);
+        canvas.drawText(text, start, end, textX + 1.5f, textY + 1.5f, paint);
 
-        // 3. Foreground active text
+        // 4. Foreground active text centered
         paint.setColor(textColor);
-        canvas.drawText(text, start, end, x + paddingPx, y, paint);
+        canvas.drawText(text, start, end, textX, textY, paint);
 
         paint.setColor(originalColor);
         paint.setStyle(originalStyle);
