@@ -30,13 +30,12 @@ public class VideoExporter {
 
     public static void export(
             Context context,
-            Uri videoUri,
+            Uri sourceVideoUri,
             List<Caption> captions,
-            CaptionStyleOptions.FontOption fontOption,
+            SlotStyleConfig configBefore,
+            SlotStyleConfig configActive,
+            SlotStyleConfig configAfter,
             float fontSizeSp,
-            int highlightColor,
-            int boxBackgroundColor,
-            CaptionStyleOptions.CaptionStyleType style,
             int previewWidthPx,
             int previewHeightPx,
             CaptionSlotTransform beforeSlot,
@@ -45,143 +44,133 @@ public class VideoExporter {
             ExportCallback callback) {
 
         Handler mainHandler = new Handler(Looper.getMainLooper());
+        callback.onProgress("Preparing export...");
 
         new Thread(() -> {
-            File tempInputVideo = new File(context.getCacheDir(), "export_input.mp4");
-            File assFile = new File(context.getCacheDir(), "export_captions.ass");
-            File fontsDir = new File(context.getCacheDir(), "export_fonts");
-            File outputVideo = new File(context.getCacheDir(),
-                    "auto_caption_export_" + System.currentTimeMillis() + ".mp4");
+            File tempSource = null;
+            File tempAss = null;
+            File tempOutput = null;
 
             try {
-                mainHandler.post(() -> callback.onProgress("Preparing video..."));
-                copyUriToFile(context, videoUri, tempInputVideo);
+                // 1. Copy original source video to cache
+                tempSource = new File(context.getCacheDir(), "export_input_" + System.currentTimeMillis() + ".mp4");
+                try (InputStream in = context.getContentResolver().openInputStream(sourceVideoUri);
+                     OutputStream out = new FileOutputStream(tempSource)) {
+                    byte[] buf = new byte[65536];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                }
 
-                int[] dims = readVideoDimensions(context, videoUri);
-                int videoWidth = dims[0];
-                int videoHeight = dims[1];
+                // 2. Extract video dimensions
+                MediaMetadataRetriever mmr = new MediaMetadataRetriever();
+                mmr.setDataSource(tempSource.getAbsolutePath());
+                String rotStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
+                int rotation = rotStr != null ? Integer.parseInt(rotStr) : 0;
+                int rawW = Integer.parseInt(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
+                int rawH = Integer.parseInt(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+                mmr.release();
 
-                mainHandler.post(() -> callback.onProgress("Preparing font..."));
-                String familyName = CaptionStyleOptions.prepareExportFont(
-                        context, fontOption, fontsDir);
+                int videoWidth = (rotation == 90 || rotation == 270) ? rawH : rawW;
+                int videoHeight = (rotation == 90 || rotation == 270) ? rawW : rawH;
 
-                mainHandler.post(() -> callback.onProgress("Building captions..."));
+                // 3. Prepare target export fonts
+                File fontsDir = new File(context.getCacheDir(), "export_fonts");
+                CaptionStyleOptions.prepareExportFont(context, configBefore.fontOption, fontsDir);
+                CaptionStyleOptions.prepareExportFont(context, configActive.fontOption, fontsDir);
+                CaptionStyleOptions.prepareExportFont(context, configAfter.fontOption, fontsDir);
+
+                // 4. Build 3-Slot ASS Subtitles
                 String assContent = AssSubtitleBuilder.build(
-                        captions, videoWidth, videoHeight,
-                        previewWidthPx, previewHeightPx,
-                        familyName, fontSizeSp, highlightColor, boxBackgroundColor, style,
-                        beforeSlot, activeSlot, afterSlot);
+                        captions,
+                        videoWidth,
+                        videoHeight,
+                        previewWidthPx,
+                        previewHeightPx,
+                        fontSizeSp,
+                        configBefore,
+                        configActive,
+                        configAfter,
+                        beforeSlot,
+                        activeSlot,
+                        afterSlot);
 
-                try (FileOutputStream fos = new FileOutputStream(assFile)) {
+                tempAss = new File(context.getCacheDir(), "export_subs_" + System.currentTimeMillis() + ".ass");
+                try (FileOutputStream fos = new FileOutputStream(tempAss)) {
                     fos.write(assContent.getBytes("UTF-8"));
                 }
 
-                mainHandler.post(() -> callback.onProgress("Encoding video..."));
+                tempOutput = new File(context.getCacheDir(), "export_out_" + System.currentTimeMillis() + ".mp4");
 
-                String command = String.format(
-                        "-y -i \"%s\" -vf \"subtitles='%s':fontsdir='%s'\" "
-                                + "-c:v h264_mediacodec -b:v 4M -c:a copy \"%s\"",
-                        tempInputVideo.getAbsolutePath(),
-                        assFile.getAbsolutePath().replace("'", "'\\''"),
-                        fontsDir.getAbsolutePath().replace("'", "'\\''"),
-                        outputVideo.getAbsolutePath());
+                // 5. FFmpeg Command Execution
+                mainHandler.post(() -> callback.onProgress("Baking captions into video..."));
 
-                FFmpegSession session = FFmpegKit.execute(command);
+                String assEscaped = tempAss.getAbsolutePath()
+                        .replace("\\", "/")
+                        .replace(":", "\\:")
+                        .replace("'", "\\'");
+                String fontsEscaped = fontsDir.getAbsolutePath()
+                        .replace("\\", "/")
+                        .replace(":", "\\:")
+                        .replace("'", "\\'");
 
-                if (!ReturnCode.isSuccess(session.getReturnCode())) {
-                    String logs = session.getAllLogsAsString();
-                    throw new Exception(
-                            "ffmpeg rc=" + session.getReturnCode() + " logs: " + logs);
+                String vfFilter = String.format("subtitles='%s':fontsdir='%s'", assEscaped, fontsEscaped);
+
+                String cmd = String.format(
+                        "-y -i \"%s\" -vf \"%s\" -c:v libx264 -preset fast -crf 22 -c:a copy \"%s\"",
+                        tempSource.getAbsolutePath(),
+                        vfFilter,
+                        tempOutput.getAbsolutePath());
+
+                FFmpegSession session = FFmpegKit.execute(cmd);
+
+                if (ReturnCode.isSuccess(session.getReturnCode())) {
+                    mainHandler.post(() -> callback.onProgress("Saving to gallery..."));
+                    Uri galleryUri = saveToGallery(context, tempOutput);
+                    mainHandler.post(() -> callback.onSuccess(galleryUri));
+                } else {
+                    String failMsg = "FFmpeg failed with state: " + session.getState();
+                    mainHandler.post(() -> callback.onError(failMsg));
                 }
-
-                if (!outputVideo.exists() || outputVideo.length() == 0) {
-                    throw new Exception("ffmpeg reported success but output file is missing/empty");
-                }
-
-                mainHandler.post(() -> callback.onProgress("Saving to gallery..."));
-                Uri savedUri = saveToGallery(context, outputVideo);
-
-                mainHandler.post(() -> callback.onSuccess(savedUri));
 
             } catch (Exception e) {
-                String message = e.getMessage() != null ? e.getMessage() : e.toString();
-                mainHandler.post(() -> callback.onError("Export failed: " + message));
+                mainHandler.post(() -> callback.onError("Export error: " + e.getMessage()));
             } finally {
-                tempInputVideo.delete();
-                assFile.delete();
-                outputVideo.delete();
-                deleteRecursive(fontsDir);
+                if (tempSource != null && tempSource.exists()) tempSource.delete();
+                if (tempAss != null && tempAss.exists()) tempAss.delete();
+                if (tempOutput != null && tempOutput.exists()) tempOutput.delete();
             }
         }).start();
     }
 
-    private static void copyUriToFile(Context context, Uri uri, File dest) throws Exception {
-        try (InputStream in = context.getContentResolver().openInputStream(uri);
-             OutputStream out = new FileOutputStream(dest)) {
-            byte[] buffer = new byte[8192];
-            int len;
-            while ((len = in.read(buffer)) != -1) out.write(buffer, 0, len);
-        }
-    }
-
-    private static int[] readVideoDimensions(Context context, Uri uri) throws Exception {
-        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
-        try {
-            retriever.setDataSource(context, uri);
-            int width = Integer.parseInt(retriever.extractMetadata(
-                    MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
-            int height = Integer.parseInt(retriever.extractMetadata(
-                    MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
-            String rotationStr = retriever.extractMetadata(
-                    MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
-            int rotation = rotationStr != null ? Integer.parseInt(rotationStr) : 0;
-            if (rotation == 90 || rotation == 270) {
-                int tmp = width; width = height; height = tmp;
-            }
-            return new int[]{width, height};
-        } finally {
-            retriever.release();
-        }
-    }
-
     private static Uri saveToGallery(Context context, File videoFile) throws Exception {
         ContentValues values = new ContentValues();
-        values.put(MediaStore.Video.Media.DISPLAY_NAME, videoFile.getName());
+        values.put(MediaStore.Video.Media.DISPLAY_NAME, "AutoCaption_" + System.currentTimeMillis() + ".mp4");
         values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES);
+            values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/AutoCaption");
             values.put(MediaStore.Video.Media.IS_PENDING, 1);
         }
 
-        Uri collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY);
-        Uri itemUri = context.getContentResolver().insert(collection, values);
-        if (itemUri == null) throw new Exception("Could not create MediaStore entry");
+        Uri uri = context.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+        if (uri == null) throw new Exception("Failed to create MediaStore entry");
 
         try (InputStream in = new java.io.FileInputStream(videoFile);
-             OutputStream out = context.getContentResolver().openOutputStream(itemUri)) {
-            byte[] buffer = new byte[8192];
+             OutputStream out = context.getContentResolver().openOutputStream(uri)) {
+            byte[] buf = new byte[65536];
             int len;
-            while ((len = in.read(buffer)) != -1) out.write(buffer, 0, len);
+            while ((len = in.read(buf)) > 0) {
+                out.write(buf, 0, len);
+            }
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             values.clear();
             values.put(MediaStore.Video.Media.IS_PENDING, 0);
-            context.getContentResolver().update(itemUri, values, null, null);
+            context.getContentResolver().update(uri, values, null, null);
         }
 
-        return itemUri;
-    }
-
-    private static void deleteRecursive(File file) {
-        if (file == null || !file.exists()) return;
-        if (file.isDirectory()) {
-            File[] children = file.listFiles();
-            if (children != null) {
-                for (File child : children) deleteRecursive(child);
-            }
-        }
-        file.delete();
+        return uri;
     }
 }
