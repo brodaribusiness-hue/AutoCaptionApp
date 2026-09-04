@@ -681,7 +681,7 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    private void runSpeechRecognition(File modelDir, File wavFile, int requestId) {
+        private void runSpeechRecognition(File modelDir, File wavFile, int requestId) {
         SpeechToText.recognize(
                 modelDir,
                 wavFile,
@@ -696,15 +696,34 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onSuccess(List<String> jsonResults) {
-                        runOnUiThread(() -> {
-                            if (requestId != currentRequestId) return;
-                            captions = CaptionParser.parseVoskResults(jsonResults);
-                            captionGroups = CaptionGrouper.group(captions, CAPTION_GROUP_SIZE);
-                            statusText.setText("Captions ready! (" + captions.size() + " words)");
-                            generateCaptionsButton.setEnabled(true);
-                            exportButton.setEnabled(true);
-                            startCaptionUpdates();
-                        });
+                        // Background thread execution to prevent UI freeze/crash on 100%
+                        new Thread(() -> {
+                            List<Caption> parsed = CaptionParser.parseVoskResults(jsonResults);
+                            List<CaptionGrouper.Group> groups = CaptionGrouper.group(parsed, CAPTION_GROUP_SIZE);
+
+                            runOnUiThread(() -> {
+                                if (requestId != currentRequestId) return;
+                                captions = parsed;
+                                captionGroups = groups;
+
+                                if (captions == null || captions.isEmpty()) {
+                                    statusText.setText("No speech detected in audio.");
+                                    generateCaptionsButton.setEnabled(true);
+                                    return;
+                                }
+
+                                statusText.setText("Captions ready! (" + captions.size() + " words)");
+                                generateCaptionsButton.setEnabled(true);
+                                exportButton.setEnabled(true);
+
+                                if (mediaPlayer != null && !mediaPlayer.isPlaying()) {
+                                    mediaPlayer.start();
+                                    playPauseButton.setText("Pause");
+                                }
+
+                                startCaptionUpdates();
+                            });
+                        }).start();
                     }
 
                     @Override
@@ -717,6 +736,8 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
     }
+
+    
 
     private void applySlotStyle(TextView slot, Caption caption, SlotStyleConfig config, boolean isActive) {
         if (caption == null || caption.word == null || caption.word.isEmpty()) {
