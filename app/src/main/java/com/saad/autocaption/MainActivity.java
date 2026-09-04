@@ -12,6 +12,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -35,6 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class MainActivity extends AppCompatActivity {
 
+    private static final String TAG = "MainActivity";
+
     private SurfaceView videoSurface;
     private SurfaceHolder surfaceHolder;
     private MediaPlayer mediaPlayer;
@@ -55,7 +58,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView timeText;
     private boolean isTrackingTouch = false;
 
-    // Slot Selection Controls
+    // Slot Controls
     private Button btnSlotBefore;
     private Button btnSlotActive;
     private Button btnSlotAfter;
@@ -96,7 +99,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.layout_main);
 
-        // 1. Initialize slot style configurations
         CaptionStyleOptions.FontOption defaultFont = CaptionStyleOptions.getFontOptions()[0];
         Typeface defaultTf = CaptionStyleOptions.resolveTypeface(this, defaultFont);
 
@@ -125,7 +127,6 @@ public class MainActivity extends AppCompatActivity {
 
         requestStoragePermissionIfNeeded();
 
-        // 2. View bindings
         videoSurface = findViewById(R.id.videoSurface);
         videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
         wordSlotBefore = findViewById(R.id.wordSlotBefore);
@@ -178,16 +179,17 @@ public class MainActivity extends AppCompatActivity {
 
         selectSlotTab(1);
 
-        // 3. Playback listeners
         playPauseButton.setOnClickListener(v -> {
             if (mediaPlayer != null) {
-                if (mediaPlayer.isPlaying()) {
-                    mediaPlayer.pause();
-                    playPauseButton.setText("Play");
-                } else {
-                    mediaPlayer.start();
-                    playPauseButton.setText("Pause");
-                }
+                try {
+                    if (mediaPlayer.isPlaying()) {
+                        mediaPlayer.pause();
+                        playPauseButton.setText("Play");
+                    } else {
+                        mediaPlayer.start();
+                        playPauseButton.setText("Pause");
+                    }
+                } catch (Exception ignored) {}
             }
         });
 
@@ -195,7 +197,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (fromUser && mediaPlayer != null) {
-                    mediaPlayer.seekTo(progress);
+                    try { mediaPlayer.seekTo(progress); } catch (Exception ignored) {}
                 }
             }
 
@@ -231,7 +233,7 @@ public class MainActivity extends AppCompatActivity {
             public void surfaceDestroyed(SurfaceHolder holder) {
                 stopCaptionUpdates();
                 if (mediaPlayer != null) {
-                    mediaPlayer.release();
+                    try { mediaPlayer.release(); } catch (Exception ignored) {}
                     mediaPlayer = null;
                 }
             }
@@ -249,6 +251,7 @@ public class MainActivity extends AppCompatActivity {
             if (videoUri != null) {
                 final int requestId = currentRequestId;
                 generateCaptionsButton.setEnabled(false);
+                exportButton.setEnabled(false);
                 captions = null;
                 captionGroups = null;
                 wordSlotBefore.setText("");
@@ -618,7 +621,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void extractAudio(Uri uri, int requestId) {
-        statusText.setText("Extracting audio...");
+        statusText.setText("Extracting audio with FFmpeg...");
 
         AudioExtractor.extractAudioToWav(
                 this,
@@ -681,7 +684,7 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-        private void runSpeechRecognition(File modelDir, File wavFile, int requestId) {
+    private void runSpeechRecognition(File modelDir, File wavFile, int requestId) {
         SpeechToText.recognize(
                 modelDir,
                 wavFile,
@@ -696,22 +699,19 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onSuccess(List<String> jsonResults) {
-                        // Background thread execution to prevent UI freeze/crash on 100%
-                        new Thread(() -> {
-                            List<Caption> parsed = CaptionParser.parseVoskResults(jsonResults);
-                            List<CaptionGrouper.Group> groups = CaptionGrouper.group(parsed, CAPTION_GROUP_SIZE);
-
-                            runOnUiThread(() -> {
-                                if (requestId != currentRequestId) return;
-                                captions = parsed;
-                                captionGroups = groups;
-
-                                if (captions == null || captions.isEmpty()) {
-                                    statusText.setText("No speech detected in audio.");
+                        // Crash guard: Safe parsing to prevent unexpected force close at 100%
+                        runOnUiThread(() -> {
+                            if (requestId != currentRequestId) return;
+                            try {
+                                List<Caption> parsed = CaptionParser.parseVoskResults(jsonResults);
+                                if (parsed == null || parsed.isEmpty()) {
+                                    statusText.setText("No speech detected in video.");
                                     generateCaptionsButton.setEnabled(true);
                                     return;
                                 }
 
+                                captions = parsed;
+                                captionGroups = CaptionGrouper.group(captions, CAPTION_GROUP_SIZE);
                                 statusText.setText("Captions ready! (" + captions.size() + " words)");
                                 generateCaptionsButton.setEnabled(true);
                                 exportButton.setEnabled(true);
@@ -722,8 +722,13 @@ public class MainActivity extends AppCompatActivity {
                                 }
 
                                 startCaptionUpdates();
-                            });
-                        }).start();
+
+                            } catch (Throwable t) {
+                                Log.e(TAG, "Error finalizing captions at 100%", t);
+                                statusText.setText("Parsing error: " + t.getMessage());
+                                generateCaptionsButton.setEnabled(true);
+                            }
+                        });
                     }
 
                     @Override
@@ -737,13 +742,14 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    
-
     private void applySlotStyle(TextView slot, Caption caption, SlotStyleConfig config, boolean isActive) {
+        if (slot == null) return;
+
         if (caption == null || caption.word == null || caption.word.isEmpty()) {
             slot.setText("");
             return;
         }
+
         String word = caption.word;
         int effectiveColor = (caption.customColor != 0) ? caption.customColor : config.textColor;
 
@@ -820,68 +826,78 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void renderGroupSafe(CaptionGrouper.Group group, int activeIndex) {
+        if (group == null || group.words == null || group.words.isEmpty()) {
+            wordSlotBefore.setText("");
+            wordSlotActive.setText("");
+            wordSlotAfter.setText("");
+            return;
+        }
+
+        boolean oneWordPunch = configSlotActive.styleType == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
+        int safeActive = (activeIndex >= 0 && activeIndex < group.words.size()) ? activeIndex : 0;
+
+        if (oneWordPunch) {
+            wordSlotBefore.setText("");
+            applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
+            wordSlotAfter.setText("");
+        } else {
+            Caption capBefore = (group.words.size() > 0) ? group.words.get(0) : null;
+            Caption capActive = (group.words.size() > 1) ? group.words.get(1) : ((group.words.size() == 1) ? group.words.get(0) : null);
+            Caption capAfter = (group.words.size() > 2) ? group.words.get(2) : null;
+
+            applySlotStyle(wordSlotBefore, capBefore, configSlotBefore, safeActive == 0);
+            applySlotStyle(wordSlotActive, capActive, configSlotActive, safeActive == 1 || group.words.size() == 1);
+            applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, safeActive == 2);
+        }
+        autoSpaceSlots();
+    }
+
     private void triggerManualCaptionRedraw() {
         if (mediaPlayer != null && captionGroups != null && !captionGroups.isEmpty()) {
-            float currentTimeSec = mediaPlayer.getCurrentPosition() / 1000.0f;
-            int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
-            if (groupIndex != -1) {
-                CaptionGrouper.Group group = captionGroups.get(groupIndex);
-                int activeIndex = group.nearestIndexAt(currentTimeSec);
-
-                boolean oneWordPunch = configSlotActive.styleType == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
-
-                if (oneWordPunch) {
-                    wordSlotBefore.setText("");
-                    applySlotStyle(wordSlotActive, group.words.get(activeIndex), configSlotActive, true);
-                    wordSlotAfter.setText("");
-                } else {
-                    applySlotStyle(wordSlotBefore, group.words.size() > 0 ? group.words.get(0) : null, configSlotBefore, activeIndex == 0);
-                    applySlotStyle(wordSlotActive, group.words.size() > 1 ? group.words.get(1) : null, configSlotActive, activeIndex == 1);
-                    applySlotStyle(wordSlotAfter, group.words.size() > 2 ? group.words.get(2) : null, configSlotAfter, activeIndex == 2);
+            try {
+                float currentTimeSec = mediaPlayer.getCurrentPosition() / 1000.0f;
+                int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
+                if (groupIndex != -1) {
+                    CaptionGrouper.Group group = captionGroups.get(groupIndex);
+                    int activeIndex = group.nearestIndexAt(currentTimeSec);
+                    renderGroupSafe(group, activeIndex);
                 }
-                autoSpaceSlots();
-            }
+            } catch (Exception ignored) {}
         }
     }
 
     private void startCaptionUpdates() {
+        stopCaptionUpdates();
+
         captionUpdateRunnable = new Runnable() {
             @Override
             public void run() {
-                if (mediaPlayer != null) {
-                    int currentPos = mediaPlayer.getCurrentPosition();
-                    int duration = mediaPlayer.getDuration();
+                try {
+                    if (mediaPlayer != null) {
+                        int currentPos = mediaPlayer.getCurrentPosition();
+                        int duration = mediaPlayer.getDuration();
 
-                    if (!isTrackingTouch && duration > 0) {
-                        videoSeekBar.setMax(duration);
-                        videoSeekBar.setProgress(currentPos);
-                        int s = currentPos / 1000;
-                        timeText.setText(String.format(java.util.Locale.US, "%02d:%02d", s / 60, s % 60));
-                    }
+                        if (!isTrackingTouch && duration > 0) {
+                            videoSeekBar.setMax(duration);
+                            videoSeekBar.setProgress(currentPos);
+                            int s = currentPos / 1000;
+                            timeText.setText(String.format(java.util.Locale.US, "%02d:%02d", s / 60, s % 60));
+                        }
 
-                    if (mediaPlayer.isPlaying() && captionGroups != null && !captionGroups.isEmpty()) {
-                        float currentTimeSec = currentPos / 1000.0f;
-                        int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
+                        if (mediaPlayer.isPlaying() && captionGroups != null && !captionGroups.isEmpty()) {
+                            float currentTimeSec = currentPos / 1000.0f;
+                            int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
 
-                        if (groupIndex != -1) {
-                            CaptionGrouper.Group group = captionGroups.get(groupIndex);
-                            int activeIndex = group.nearestIndexAt(currentTimeSec);
-
-                            boolean oneWordPunch = configSlotActive.styleType
-                                    == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
-
-                            if (oneWordPunch) {
-                                wordSlotBefore.setText("");
-                                applySlotStyle(wordSlotActive, group.words.get(activeIndex), configSlotActive, true);
-                                wordSlotAfter.setText("");
-                            } else {
-                                applySlotStyle(wordSlotBefore, group.words.size() > 0 ? group.words.get(0) : null, configSlotBefore, activeIndex == 0);
-                                applySlotStyle(wordSlotActive, group.words.size() > 1 ? group.words.get(1) : null, configSlotActive, activeIndex == 1);
-                                applySlotStyle(wordSlotAfter, group.words.size() > 2 ? group.words.get(2) : null, configSlotAfter, activeIndex == 2);
+                            if (groupIndex != -1 && groupIndex < captionGroups.size()) {
+                                CaptionGrouper.Group group = captionGroups.get(groupIndex);
+                                int activeIndex = group.nearestIndexAt(currentTimeSec);
+                                renderGroupSafe(group, activeIndex);
                             }
-                            autoSpaceSlots();
                         }
                     }
+                } catch (Throwable t) {
+                    Log.e(TAG, "Caption update loop caught exception", t);
                 }
                 captionUpdateHandler.postDelayed(this, 50);
             }
@@ -935,7 +951,7 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
         stopCaptionUpdates();
         if (mediaPlayer != null) {
-            mediaPlayer.release();
+            try { mediaPlayer.release(); } catch (Exception ignored) {}
             mediaPlayer = null;
         }
         if (extractedWavFile != null) {
