@@ -20,7 +20,6 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -46,13 +45,11 @@ public class MainActivity extends AppCompatActivity {
     private Button generateCaptionsButton;
     private Button exportButton;
     private Button boxColorButton;
-    private Button editWordColorsButton;
     private Spinner fontStyleSpinner;
     private Spinner captionColorSpinner;
     private Spinner captionStyleSpinner;
     private AspectRatioFrameLayout videoPreviewContainer;
 
-    // Controls
     private Button playPauseButton;
     private SeekBar videoSeekBar;
     private TextView timeText;
@@ -73,7 +70,7 @@ public class MainActivity extends AppCompatActivity {
 
     private Typeface selectedTypeface = Typeface.SANS_SERIF;
     private CaptionStyleOptions.FontOption selectedFontOption;
-    private int selectedColor = 0xFFFFEB3B;
+    private int selectedColor = 0xFFFFEA00;
     private int selectedBoxColor = 0xCC000000;
     private final float selectedFontSizeSp = 22f;
 
@@ -122,7 +119,6 @@ public class MainActivity extends AppCompatActivity {
         generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
         exportButton = (Button) findViewById(R.id.exportButton);
         boxColorButton = (Button) findViewById(R.id.boxColorButton);
-        editWordColorsButton = (Button) findViewById(R.id.editWordColorsButton);
         statusText = (TextView) findViewById(R.id.statusText);
         fontStyleSpinner = (Spinner) findViewById(R.id.fontStyleSpinner);
         captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
@@ -180,21 +176,15 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                isTrackingTouch = true;
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                isTrackingTouch = false;
-            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { isTrackingTouch = true; }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) { isTrackingTouch = false; }
         });
 
         boxColorButton.setOnClickListener(v ->
-                showBoxColorPickerDialog(selectedBoxColor, color -> selectedBoxColor = color));
-
-        editWordColorsButton.setOnClickListener(v -> showWordColorEditorDialog());
+                showBoxColorPickerDialog(selectedBoxColor, color -> {
+                    selectedBoxColor = color;
+                    triggerManualCaptionRedraw();
+                }));
 
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
@@ -358,9 +348,13 @@ public class MainActivity extends AppCompatActivity {
                 CaptionStyleOptions.ColorOption chosen = colors[position];
                 if (chosen.color == 0) {
                     showHueColorPickerDialog(
-                            "Pick Caption Color", selectedColor, color -> selectedColor = color);
+                            "Pick Caption Color", selectedColor, color -> {
+                                selectedColor = color;
+                                triggerManualCaptionRedraw();
+                            });
                 } else {
                     selectedColor = chosen.color;
+                    triggerManualCaptionRedraw();
                 }
             }
 
@@ -380,6 +374,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 selectedStyle = styles[position].type;
+                triggerManualCaptionRedraw();
             }
 
             @Override public void onNothingSelected(AdapterView<?> parent) {}
@@ -517,60 +512,6 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void showWordColorEditorDialog() {
-        if (captions == null || captions.isEmpty()) {
-            statusText.setText("Generate captions first");
-            return;
-        }
-
-        ScrollView scrollView = new ScrollView(this);
-        LinearLayout listContainer = new LinearLayout(this);
-        listContainer.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) dpToPx(16);
-        listContainer.setPadding(pad, pad, pad, pad);
-        scrollView.addView(listContainer);
-
-        for (Caption cap : captions) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            row.setPadding(0, (int) dpToPx(6), 0, (int) dpToPx(6));
-
-            TextView wordLabel = new TextView(this);
-            wordLabel.setText(cap.word);
-            wordLabel.setTextColor(0xFFFFFFFF);
-            wordLabel.setTextSize(16f);
-            LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-            wordLabel.setLayoutParams(labelParams);
-
-            Button swatch = new Button(this);
-            swatch.setText("");
-            LinearLayout.LayoutParams swatchParams =
-                    new LinearLayout.LayoutParams((int) dpToPx(56), (int) dpToPx(32));
-            swatch.setLayoutParams(swatchParams);
-            swatch.setBackgroundColor(cap.resolveColor(selectedColor));
-
-            swatch.setOnClickListener(v -> showHueColorPickerDialog(
-                    "Color for \"" + cap.word + "\"",
-                    cap.resolveColor(selectedColor),
-                    chosen -> {
-                        cap.customColor = chosen;
-                        swatch.setBackgroundColor(chosen);
-                    }));
-
-            row.addView(wordLabel);
-            row.addView(swatch);
-            listContainer.addView(row);
-        }
-
-        new AlertDialog.Builder(this)
-                .setTitle("Edit Word Colors")
-                .setView(scrollView)
-                .setPositiveButton("Done", (dialog, which) -> dialog.dismiss())
-                .show();
-    }
-
     private void handlePickedVideo(Intent data) {
         videoUri = data.getData();
         if (videoUri != null) {
@@ -698,7 +639,7 @@ public class MainActivity extends AppCompatActivity {
     private Object buildActiveWordSpan(int color) {
         switch (selectedStyle) {
             case HIGHLIGHT_POP:
-                return new android.text.style.ForegroundColorSpan(0xFFFF3D00);
+                return new android.text.style.ForegroundColorSpan(color);
             case GREEN_EMPHASIS:
                 return new android.text.style.ForegroundColorSpan(0xFF00E676);
             case KARAOKE_FLOW:
@@ -706,7 +647,7 @@ public class MainActivity extends AppCompatActivity {
             case ONE_WORD_PUNCH:
                 return new PopScaleSpan(color, 1.8f);
             case BOX_HIGHLIGHT:
-                return new BackgroundBoxSpan(color, selectedBoxColor, 12f, 16f);
+                return new BackgroundBoxSpan(color, selectedBoxColor, 14f, 14f);
             case BOUNCE:
                 return new BounceSpan(color);
             case GLOW_POP:
@@ -783,6 +724,34 @@ public class MainActivity extends AppCompatActivity {
         if (!afterSlotGesture.isPositionDragged()) {
             float afterWidth = measureSlotWidth(wordSlotAfter);
             wordSlotAfter.setTranslationX(activeWidth / 2f + gap + afterWidth / 2f);
+        }
+    }
+
+    private void triggerManualCaptionRedraw() {
+        if (mediaPlayer != null && captionGroups != null && !captionGroups.isEmpty()) {
+            float currentTimeSec = mediaPlayer.getCurrentPosition() / 1000.0f;
+            int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
+            if (groupIndex != -1) {
+                CaptionGrouper.Group group = captionGroups.get(groupIndex);
+                int activeIndex = group.nearestIndexAt(currentTimeSec);
+                boolean oneWordPunch = selectedStyle == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
+
+                if (oneWordPunch) {
+                    wordSlotBefore.setText("");
+                    applySlotStyle(wordSlotActive, group.words.get(activeIndex), true);
+                    wordSlotAfter.setText("");
+                } else {
+                    TextView[] slots = { wordSlotBefore, wordSlotActive, wordSlotAfter };
+                    for (int slotPos = 0; slotPos < slots.length; slotPos++) {
+                        if (slotPos >= group.words.size()) {
+                            slots[slotPos].setText("");
+                        } else {
+                            applySlotStyle(slots[slotPos], group.words.get(slotPos), slotPos == activeIndex);
+                        }
+                    }
+                }
+                autoSpaceSlots();
+            }
         }
     }
 
