@@ -1,11 +1,9 @@
 package com.saad.autocaption;
 
-import android.animation.ValueAnimator;
 import android.app.AlertDialog;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -15,16 +13,15 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.text.InputType;
 import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.View;
 import android.view.SurfaceView;
 import android.view.SurfaceHolder;
-import android.view.animation.DecelerateInterpolator;
-import android.view.animation.OvershootInterpolator;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.AdapterView;
@@ -48,10 +45,10 @@ public class MainActivity extends AppCompatActivity {
     private TextView wordSlotBefore;
     private TextView wordSlotActive;
     private TextView wordSlotAfter;
-    private View highlightBoxView;
     private Button generateCaptionsButton;
     private Button exportButton;
-    private Button playPauseButton;
+    private Button boxColorButton;
+    private Button editWordColorsButton;
     private Spinner fontStyleSpinner;
     private Spinner captionColorSpinner;
     private Spinner captionStyleSpinner;
@@ -59,6 +56,13 @@ public class MainActivity extends AppCompatActivity {
     private Uri videoUri;
     private File extractedWavFile;
     private List<Caption> captions;
+
+    // NEW: fixed-size caption blocks mirroring what AssSubtitleBuilder
+    // uses for export, so preview and exported video always match and
+    // captions never appear to type out one word at a time.
+    private List<CaptionGrouper.Group> captionGroups;
+    private static final int CAPTION_GROUP_SIZE = CaptionGrouper.DEFAULT_GROUP_SIZE;
+
     private Handler captionUpdateHandler;
     private Runnable captionUpdateRunnable;
 
@@ -69,21 +73,27 @@ public class MainActivity extends AppCompatActivity {
     private Typeface selectedTypeface = Typeface.SANS_SERIF;
     private CaptionStyleOptions.FontOption selectedFontOption;
     private int selectedColor = 0xFFFFEB3B;
+
+    // NEW: independent box background color for the Box Highlight
+    // style. Defaults to a semi-transparent black pill.
+    private int selectedBoxColor = 0xCC000000;
+
     private final float selectedFontSizeSp = 22f;
 
     private CaptionStyleOptions.CaptionStyleType selectedStyle =
             CaptionStyleOptions.CaptionStyleType.HIGHLIGHT_POP;
-    private List<CaptionGrouper.Group> captionGroups;
-private static final int CAPTION_GROUP_SIZE = 3;
 
     private final AtomicInteger requestIdGenerator = new AtomicInteger(0);
     private volatile int currentRequestId = 0;
 
-    private int lastAnchorIndex = -1;
-    private ValueAnimator boxSlideAnimator;
-
     private ActivityResultLauncher<Intent> pickVideoLauncher;
     private ActivityResultLauncher<String> storagePermissionLauncher;
+
+    /** Callback used by both color-picker dialogs to hand back the
+     * color the user picked once they tap Apply. */
+    private interface ColorPickCallback {
+        void onColorPicked(int color);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -117,22 +127,16 @@ private static final int CAPTION_GROUP_SIZE = 3;
         Button selectVideoButton = (Button) findViewById(R.id.selectVideoButton);
         generateCaptionsButton = (Button) findViewById(R.id.generateCaptionsButton);
         exportButton = (Button) findViewById(R.id.exportButton);
-        playPauseButton = (Button) findViewById(R.id.playPauseButton);
+        boxColorButton = (Button) findViewById(R.id.boxColorButton);
+        editWordColorsButton = (Button) findViewById(R.id.editWordColorsButton);
         statusText = (TextView) findViewById(R.id.statusText);
         fontStyleSpinner = (Spinner) findViewById(R.id.fontStyleSpinner);
         captionColorSpinner = (Spinner) findViewById(R.id.captionColorSpinner);
         captionStyleSpinner = (Spinner) findViewById(R.id.captionStyleSpinner);
 
-        wordSlotBefore.setLayerType(View.LAYER_TYPE_NONE, null);
-        wordSlotActive.setLayerType(View.LAYER_TYPE_NONE, null);
-        wordSlotAfter.setLayerType(View.LAYER_TYPE_NONE, null);
-
-        wordSlotBefore.getPaint().setAntiAlias(true);
-        wordSlotActive.getPaint().setAntiAlias(true);
-        wordSlotAfter.getPaint().setAntiAlias(true);
-        wordSlotBefore.getPaint().setSubpixelText(true);
-        wordSlotActive.getPaint().setSubpixelText(true);
-        wordSlotAfter.getPaint().setSubpixelText(true);
+        wordSlotBefore.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        wordSlotActive.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+        wordSlotAfter.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
 
         wordSlotBefore.setTypeface(selectedTypeface);
         wordSlotActive.setTypeface(selectedTypeface);
@@ -153,12 +157,15 @@ private static final int CAPTION_GROUP_SIZE = 3;
 
         generateCaptionsButton.setEnabled(false);
         exportButton.setEnabled(false);
-        playPauseButton.setEnabled(false);
 
         setupFontSpinner();
         setupColorSpinner();
         setupStyleSpinner();
-        setupHighlightBoxView();
+
+        boxColorButton.setOnClickListener(v ->
+                showBoxColorPickerDialog(selectedBoxColor, color -> selectedBoxColor = color));
+
+        editWordColorsButton.setOnClickListener(v -> showWordColorEditorDialog());
 
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
@@ -173,7 +180,6 @@ private static final int CAPTION_GROUP_SIZE = 3;
                 if (videoUri != null) {
                     playVideo(videoUri);
                 }
-                resyncCaptionEngineIfNeeded();
             }
 
             @Override
@@ -208,37 +214,11 @@ private static final int CAPTION_GROUP_SIZE = 3;
                     final int requestId = currentRequestId;
                     generateCaptionsButton.setEnabled(false);
                     captions = null;
-                    lastAnchorIndex = -1;
+                    captionGroups = null;
                     wordSlotBefore.setText("");
                     wordSlotActive.setText("");
                     wordSlotAfter.setText("");
-                    highlightBoxView.setAlpha(0f);
                     extractAudio(videoUri, requestId);
-                }
-            }
-        });
-
-        // NEW: Play/Pause button. Toggles MediaPlayer state; the caption
-        // sync loop already checks mediaPlayer.isPlaying() each tick, so
-        // pausing playback automatically freezes captions in place —
-        // no separate pause logic needed for the sync engine itself.
-        playPauseButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                if (mediaPlayer == null) {
-                    return;
-                }
-                try {
-                    if (mediaPlayer.isPlaying()) {
-                        mediaPlayer.pause();
-                        playPauseButton.setText("▶");
-                    } else {
-                        mediaPlayer.start();
-                        playPauseButton.setText("II");
-                        resyncCaptionEngineIfNeeded();
-                    }
-                } catch (IllegalStateException ignored) {
-                    // MediaPlayer not in a valid state (e.g. still preparing) — ignore tap.
                 }
             }
         });
@@ -273,6 +253,7 @@ private static final int CAPTION_GROUP_SIZE = 3;
                         selectedFontOption,
                         selectedFontSizeSp,
                         selectedColor,
+                        selectedBoxColor,
                         selectedStyle,
                         previewWidthPx,
                         previewHeightPx,
@@ -362,7 +343,8 @@ private static final int CAPTION_GROUP_SIZE = 3;
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 CaptionStyleOptions.ColorOption chosen = colors[position];
                 if (chosen.color == 0) {
-                    showCustomColorDialog();
+                    showHueColorPickerDialog(
+                            "Pick Caption Color", selectedColor, color -> selectedColor = color);
                 } else {
                     selectedColor = chosen.color;
                 }
@@ -386,9 +368,6 @@ private static final int CAPTION_GROUP_SIZE = 3;
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 selectedStyle = styles[position].type;
-                highlightBoxView.animate().cancel();
-                highlightBoxView.setAlpha(0f);
-                lastAnchorIndex = -1;
             }
 
             @Override
@@ -397,45 +376,210 @@ private static final int CAPTION_GROUP_SIZE = 3;
         });
     }
 
-    private void setupHighlightBoxView() {
-        FrameLayout captionLayer = findViewById(R.id.captionLayer);
+    // ---------------------------------------------------------------
+    // Color pickers
+    // ---------------------------------------------------------------
 
-        highlightBoxView = new View(this);
-        GradientDrawable boxBg = new GradientDrawable();
-        boxBg.setColor(0xFF000000);
-        boxBg.setCornerRadius(dpToPx(12));
-        highlightBoxView.setBackground(boxBg);
-        highlightBoxView.setAlpha(0f);
-
-        FrameLayout.LayoutParams boxParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT);
-        boxParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-
-        captionLayer.addView(highlightBoxView, 0, boxParams);
+    private int colorToHue(int color) {
+        float[] hsv = new float[3];
+        Color.colorToHSV(color, hsv);
+        return Math.round(hsv[0]);
     }
 
-    private void showCustomColorDialog() {
-        EditText input = new EditText(this);
-        input.setHint("#RRGGBB e.g. #FF00FF");
-        input.setInputType(InputType.TYPE_CLASS_TEXT);
-        input.setTextColor(0xFFFFFFFF);
-        input.setHintTextColor(0xFF888888);
+    /** Hue-only picker: saturation and brightness are locked to 100%,
+     * so the user can never accidentally pick a washed-out/dull color.
+     * Used for the global highlight color and every per-word override —
+     * this is what guarantees highlight colors stay sharp and bright. */
+    private void showHueColorPickerDialog(String title, int initialColor, ColorPickCallback callback) {
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) dpToPx(20);
+        container.setPadding(pad, pad, pad, pad);
+
+        final View previewBox = new View(this);
+        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (int) dpToPx(60));
+        previewParams.bottomMargin = (int) dpToPx(16);
+        previewBox.setLayoutParams(previewParams);
+
+        final int[] hue = { colorToHue(initialColor) };
+        previewBox.setBackgroundColor(Color.HSVToColor(new float[]{hue[0], 1f, 1f}));
+
+        SeekBar hueSlider = new SeekBar(this);
+        hueSlider.setMax(360);
+        hueSlider.setProgress(hue[0]);
+        hueSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                hue[0] = progress;
+                previewBox.setBackgroundColor(Color.HSVToColor(new float[]{progress, 1f, 1f}));
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+
+        container.addView(previewBox);
+        container.addView(hueSlider);
 
         new AlertDialog.Builder(this)
-                .setTitle("Custom Caption Color")
-                .setView(input)
-                .setPositiveButton("Apply", (dialog, which) -> {
-                    String hex = input.getText().toString().trim();
-                    try {
-                        selectedColor = Color.parseColor(hex);
-                    } catch (Exception e) {
-                        statusText.setText("Invalid color code, keeping previous color");
-                    }
-                })
+                .setTitle(title)
+                .setView(container)
+                .setPositiveButton("Apply", (dialog, which) ->
+                        callback.onColorPicked(Color.HSVToColor(new float[]{hue[0], 1f, 1f})))
                 .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
                 .show();
     }
+
+    /** Box-background picker: unlike the highlight picker this allows
+     * dark/desaturated shades and transparency, since a caption box
+     * background is usually black/dark rather than a bright accent
+     * color. Hue + Brightness + Opacity are all user-controlled. */
+    private void showBoxColorPickerDialog(int initialColor, ColorPickCallback callback) {
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) dpToPx(20);
+        container.setPadding(pad, pad, pad, pad);
+
+        final View previewBox = new View(this);
+        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, (int) dpToPx(60));
+        previewParams.bottomMargin = (int) dpToPx(16);
+        previewBox.setLayoutParams(previewParams);
+
+        float[] initHsv = new float[3];
+        Color.colorToHSV(initialColor, initHsv);
+        final int[] hue = { Math.round(initHsv[0]) };
+        final int[] value = { Math.round(initHsv[2] * 100) };
+        final int[] alpha = { Math.round(Color.alpha(initialColor) * 100 / 255f) };
+
+        Runnable updatePreview = () -> previewBox.setBackgroundColor(
+                Color.HSVToColor(Math.round(alpha[0] * 255 / 100f),
+                        new float[]{hue[0], 1f, value[0] / 100f}));
+        updatePreview.run();
+
+        TextView hueLabel = new TextView(this);
+        hueLabel.setText("Hue");
+        hueLabel.setTextColor(0xFFCCCCCC);
+        SeekBar hueSlider = new SeekBar(this);
+        hueSlider.setMax(360);
+        hueSlider.setProgress(hue[0]);
+
+        TextView valueLabel = new TextView(this);
+        valueLabel.setText("Brightness");
+        valueLabel.setTextColor(0xFFCCCCCC);
+        SeekBar valueSlider = new SeekBar(this);
+        valueSlider.setMax(100);
+        valueSlider.setProgress(value[0]);
+
+        TextView alphaLabel = new TextView(this);
+        alphaLabel.setText("Opacity");
+        alphaLabel.setTextColor(0xFFCCCCCC);
+        SeekBar alphaSlider = new SeekBar(this);
+        alphaSlider.setMax(100);
+        alphaSlider.setProgress(alpha[0]);
+
+        hueSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar sb, int p, boolean fromUser) {
+                hue[0] = p; updatePreview.run();
+            }
+            @Override public void onStartTrackingTouch(SeekBar sb) {}
+            @Override public void onStopTrackingTouch(SeekBar sb) {}
+        });
+        valueSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar sb, int p, boolean fromUser) {
+                value[0] = p; updatePreview.run();
+            }
+            @Override public void onStartTrackingTouch(SeekBar sb) {}
+            @Override public void onStopTrackingTouch(SeekBar sb) {}
+        });
+        alphaSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar sb, int p, boolean fromUser) {
+                alpha[0] = p; updatePreview.run();
+            }
+            @Override public void onStartTrackingTouch(SeekBar sb) {}
+            @Override public void onStopTrackingTouch(SeekBar sb) {}
+        });
+
+        container.addView(previewBox);
+        container.addView(hueLabel);
+        container.addView(hueSlider);
+        container.addView(valueLabel);
+        container.addView(valueSlider);
+        container.addView(alphaLabel);
+        container.addView(alphaSlider);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Box Background Color")
+                .setView(container)
+                .setPositiveButton("Apply", (dialog, which) ->
+                        callback.onColorPicked(Color.HSVToColor(
+                                Math.round(alpha[0] * 255 / 100f),
+                                new float[]{hue[0], 1f, value[0] / 100f})))
+                .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
+    /** Lists every recognized word with its current highlight swatch;
+     * tapping a swatch opens the hue picker scoped to that single
+     * Caption, setting Caption.customColor so each word's color can be
+     * changed completely independently of the others. */
+    private void showWordColorEditorDialog() {
+        if (captions == null || captions.isEmpty()) {
+            statusText.setText("Generate captions first");
+            return;
+        }
+
+        ScrollView scrollView = new ScrollView(this);
+        LinearLayout listContainer = new LinearLayout(this);
+        listContainer.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) dpToPx(16);
+        listContainer.setPadding(pad, pad, pad, pad);
+        scrollView.addView(listContainer);
+
+        for (Caption cap : captions) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            row.setPadding(0, (int) dpToPx(6), 0, (int) dpToPx(6));
+
+            TextView wordLabel = new TextView(this);
+            wordLabel.setText(cap.word);
+            wordLabel.setTextColor(0xFFFFFFFF);
+            wordLabel.setTextSize(16f);
+            LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            wordLabel.setLayoutParams(labelParams);
+
+            Button swatch = new Button(this);
+            swatch.setText("");
+            LinearLayout.LayoutParams swatchParams =
+                    new LinearLayout.LayoutParams((int) dpToPx(56), (int) dpToPx(32));
+            swatch.setLayoutParams(swatchParams);
+            swatch.setBackgroundColor(cap.resolveColor(selectedColor));
+
+            swatch.setOnClickListener(v -> showHueColorPickerDialog(
+                    "Color for \"" + cap.word + "\"",
+                    cap.resolveColor(selectedColor),
+                    chosen -> {
+                        cap.customColor = chosen;
+                        swatch.setBackgroundColor(chosen);
+                    }));
+
+            row.addView(wordLabel);
+            row.addView(swatch);
+            listContainer.addView(row);
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Edit Word Colors")
+                .setView(scrollView)
+                .setPositiveButton("Done", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
+    // ---------------------------------------------------------------
+    // Video / caption pipeline
+    // ---------------------------------------------------------------
 
     private void handlePickedVideo(Intent data) {
 
@@ -452,14 +596,11 @@ private static final int CAPTION_GROUP_SIZE = 3;
         currentRequestId = requestIdGenerator.incrementAndGet();
 
         captions = null;
-        lastAnchorIndex = -1;
+        captionGroups = null;
         wordSlotBefore.setText("");
         wordSlotActive.setText("");
         wordSlotAfter.setText("");
-        highlightBoxView.setAlpha(0f);
         exportButton.setEnabled(false);
-        playPauseButton.setEnabled(true);
-        playPauseButton.setText("II");
 
         playVideo(videoUri);
 
@@ -588,7 +729,7 @@ private static final int CAPTION_GROUP_SIZE = 3;
                                     return;
                                 }
                                 captions = CaptionParser.parseVoskResults(jsonResults);
-                                lastAnchorIndex = -1;
+                                captionGroups = CaptionGrouper.group(captions, CAPTION_GROUP_SIZE);
                                 statusText.setText(
                                         "Captions ready! (" + captions.size() + " words)");
                                 generateCaptionsButton.setEnabled(true);
@@ -614,64 +755,43 @@ private static final int CAPTION_GROUP_SIZE = 3;
                 });
     }
 
-    // Simplified to reliable built-in spans per style — every style now
-    // produces a visibly distinct, guaranteed-rendering result:
-    //   HIGHLIGHT_POP  -> solid orange + View-level scale pop animation
-    //   GREEN_EMPHASIS -> solid neon green
-    //   KARAOKE_FLOW   -> full-height color block behind the word
-    //   BOX_HIGHLIGHT  -> white text over the sliding shared box view
-    //   BOUNCE         -> pulsing size (span)
-    //   ONE_WORD_PUNCH -> enlarged size (span)
-    //   GLOW_POP       -> blurred halo + sharp text (span)
-    //   MINIMAL_CLEAN  -> plain white bold
-    private Object buildActiveWordSpan() {
+    // ---------------------------------------------------------------
+    // Caption rendering
+    // ---------------------------------------------------------------
+
+    private Object buildActiveWordSpan(int color) {
         switch (selectedStyle) {
             case HIGHLIGHT_POP:
-                return new android.text.style.ForegroundColorSpan(0xFFFF9800);
+                // Fixed sharp/bright accent — kept in sync with
+                // AssSubtitleBuilder.HIGHLIGHT_POP_COLOR for export parity.
+                return new android.text.style.ForegroundColorSpan(0xFFFF3D00);
 
             case GREEN_EMPHASIS:
-                return new android.text.style.ForegroundColorSpan(0xFF39FF14);
+                // Kept in sync with AssSubtitleBuilder.GREEN_EMPHASIS_COLOR.
+                return new android.text.style.ForegroundColorSpan(0xFF00E676);
 
             case KARAOKE_FLOW:
-                return new KaraokeFillSpan(0xFF000000, selectedColor, 14f);
-
-            case BOX_HIGHLIGHT:
-                return new android.text.style.ForegroundColorSpan(0xFFFFFFFF);
+                return new KaraokeFillSpan(0xFFFFFFFF, color, 8f);
 
             case ONE_WORD_PUNCH:
-                return new PopScaleSpan(selectedColor, 1.6f);
+                return new PopScaleSpan(color, 1.8f);
+
+            case BOX_HIGHLIGHT:
+                // Text color is this word's resolved highlight color;
+                // box background is the user's independently-chosen
+                // selectedBoxColor.
+                return new BackgroundBoxSpan(color, selectedBoxColor, 12f, 16f);
 
             case BOUNCE:
-                return new BounceSpan(selectedColor);
+                return new BounceSpan(color);
 
             case GLOW_POP:
-                int glowColor = (selectedColor & 0x00FFFFFF) | 0x80000000;
-                return new GlowPopSpan(selectedColor, glowColor, 1.15f, 5f);
+                int glowColor = (color & 0x00FFFFFF) | 0x80000000;
+                return new GlowPopSpan(color, glowColor, 1.15f, 5f);
 
             case MINIMAL_CLEAN:
             default:
                 return null;
-        }
-    }
-
-    // Max visual scale each active-word span can render at. Used to
-    // reserve enough horizontal space in autoSpaceSlots() so an
-    // enlarged active word never overlaps/hides the before/after
-    // words — this was the actual cause of Bounce/Glow Pop appearing
-    // to show "only one word": spacing was computed from the plain,
-    // unscaled text width and didn't account for the span's growth.
-    private float activeStyleMaxScale() {
-        switch (selectedStyle) {
-            case BOUNCE:
-                return 1.25f;
-            case ONE_WORD_PUNCH:
-                return 1.6f;
-            case GLOW_POP:
-                return 1.15f;
-            case HIGHLIGHT_POP:
-                return 1.15f; // View-level pop animation, brief overlap only
-            default:
-                return 1.0f;
         }
     }
 
@@ -682,34 +802,17 @@ private static final int CAPTION_GROUP_SIZE = 3;
             case MINIMAL_CLEAN:
                 return 0xFFFFFFFF;
             default:
-                return 0xFFDDDDDD;
+                return 0xCCCCCCCC;
         }
     }
 
-    private void applyLayerTypeForStyle(TextView slot, boolean isActive) {
-        boolean needsSoftwareLayer =
-                isActive && selectedStyle == CaptionStyleOptions.CaptionStyleType.GLOW_POP;
-        int desired = needsSoftwareLayer ? View.LAYER_TYPE_SOFTWARE : View.LAYER_TYPE_NONE;
-        if (slot.getLayerType() != desired) {
-            slot.setLayerType(desired, null);
-            // FIX: force an immediate invalidate so the BlurMaskFilter in
-            // GlowPopSpan is guaranteed to draw through a software layer
-            // on the very next frame, instead of possibly rendering once
-            // more through the stale hardware layer (which silently drops
-            // the blur, making Glow Pop look like it "doesn't glow").
-            slot.invalidate();
-        }
-    }
-
-    private void applySlotStyle(TextView slot, String word, boolean isActive) {
-        if (word == null || word.isEmpty()) {
+    private void applySlotStyle(TextView slot, Caption caption, boolean isActive) {
+        if (caption == null || caption.word == null || caption.word.isEmpty()) {
             slot.setText("");
             return;
         }
-
-        applyLayerTypeForStyle(slot, isActive);
-
-        slot.setShadowLayer(6f, 0f, 2f, 0xFF000000);
+        String word = caption.word;
+        int effectiveColor = caption.resolveColor(selectedColor);
 
         if (selectedStyle == CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN) {
             slot.setText(word);
@@ -719,26 +822,25 @@ private static final int CAPTION_GROUP_SIZE = 3;
         }
 
         if (!isActive) {
-            android.text.SpannableString rest = new android.text.SpannableString(word);
-            rest.setSpan(new OutlineSpan(restWordColor(), 0xFF000000, 3.5f),
-                    0, word.length(), 0);
+            slot.setText(word);
+            slot.setTextColor(restWordColor());
             slot.setTypeface(selectedTypeface, Typeface.NORMAL);
-            slot.setText(rest);
             return;
         }
 
         android.text.SpannableString spannable = new android.text.SpannableString(word);
-        Object span = buildActiveWordSpan();
+        Object span = buildActiveWordSpan(effectiveColor);
         if (span != null) {
             spannable.setSpan(span, 0, word.length(), 0);
         }
-
         boolean skipBold = selectedStyle == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT
                 || selectedStyle == CaptionStyleOptions.CaptionStyleType.KARAOKE_FLOW;
         slot.setTypeface(selectedTypeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
         slot.setText(spannable);
     }
 
+    // Measures how wide a slot's current text actually renders,
+    // including its own left/right padding.
     private float measureSlotWidth(TextView slot) {
         CharSequence text = slot.getText();
         if (text == null || text.length() == 0) {
@@ -748,14 +850,14 @@ private static final int CAPTION_GROUP_SIZE = 3;
                 + slot.getPaddingLeft() + slot.getPaddingRight();
     }
 
+    // Places before/active/after slots side-by-side based on their
+    // actual measured width, with a small fixed gap — only for slots the
+    // user hasn't manually dragged. Prevents overlap on long words and
+    // excess empty gap on short words.
     private void autoSpaceSlots() {
         float gap = dpToPx(8);
 
-        // FIX: reserve extra room for the active word's real render-time
-        // size, not just its plain measured text width, so styles that
-        // visually enlarge the active word (Bounce, One Word Punch, Glow
-        // Pop, Highlight Pop) don't overlap and hide the before/after words.
-        float activeWidth = measureSlotWidth(wordSlotActive) * activeStyleMaxScale();
+        float activeWidth = measureSlotWidth(wordSlotActive);
 
         if (!activeSlotGesture.isPositionDragged()) {
             wordSlotActive.setTranslationX(0f);
@@ -772,140 +874,49 @@ private static final int CAPTION_GROUP_SIZE = 3;
         }
     }
 
-    private void playActiveWordTransition() {
-        if (selectedStyle == CaptionStyleOptions.CaptionStyleType.HIGHLIGHT_POP) {
-            wordSlotActive.animate().cancel();
-            wordSlotActive.setScaleX(1f);
-            wordSlotActive.setScaleY(1f);
-            wordSlotActive.animate()
-                    .scaleX(1.15f).scaleY(1.15f)
-                    .setDuration(90)
-                    .setInterpolator(new OvershootInterpolator(3f))
-                    .withEndAction(() -> wordSlotActive.animate()
-                            .scaleX(1f).scaleY(1f)
-                            .setDuration(110)
-                            .setInterpolator(new DecelerateInterpolator())
-                            .start())
-                    .start();
-        }
-
-        if (selectedStyle == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT) {
-            slideHighlightBoxTo(wordSlotActive);
-        } else if (highlightBoxView.getAlpha() != 0f) {
-            highlightBoxView.animate().alpha(0f).setDuration(100).start();
-        }
-    }
-
-    private void slideHighlightBoxTo(TextView target) {
-        target.post(() -> {
-            int widthPx = target.getWidth() + (int) dpToPx(8);
-            int heightPx = target.getHeight() + (int) dpToPx(4);
-            float targetX = target.getTranslationX();
-            float targetY = target.getTranslationY();
-
-            FrameLayout.LayoutParams lp =
-                    (FrameLayout.LayoutParams) highlightBoxView.getLayoutParams();
-            boolean firstShow = highlightBoxView.getAlpha() == 0f;
-            lp.width = widthPx;
-            lp.height = heightPx;
-            highlightBoxView.setLayoutParams(lp);
-
-            if (firstShow) {
-                highlightBoxView.setTranslationX(targetX);
-                highlightBoxView.setTranslationY(targetY);
-                highlightBoxView.animate().alpha(1f).setDuration(80).start();
-            } else {
-                if (boxSlideAnimator != null) {
-                    boxSlideAnimator.cancel();
-                }
-                float startX = highlightBoxView.getTranslationX();
-                float startY = highlightBoxView.getTranslationY();
-                boxSlideAnimator = ValueAnimator.ofFloat(0f, 1f);
-                boxSlideAnimator.setDuration(120);
-                boxSlideAnimator.setInterpolator(new DecelerateInterpolator());
-                boxSlideAnimator.addUpdateListener(anim -> {
-                    float f = (float) anim.getAnimatedValue();
-                    highlightBoxView.setTranslationX(startX + (targetX - startX) * f);
-                    highlightBoxView.setTranslationY(startY + (targetY - startY) * f);
-                });
-                boxSlideAnimator.start();
-            }
-        });
-    }
-
-    private void resyncCaptionEngineIfNeeded() {
-        if (captions != null && !captions.isEmpty()) {
-            stopCaptionUpdates();
-            lastAnchorIndex = -1;
-            startCaptionUpdates();
-        }
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        resyncCaptionEngineIfNeeded();
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-        stopCaptionUpdates();
-    }
-
+    // FIX: uses fixed 3-word CaptionGrouper blocks instead of a sliding
+    // window recomputed from the globally active word. The three slots
+    // now map 1:1 to a stable group's word[0]/word[1]/word[2]; only
+    // which slot is "active" (highlighted) changes as playback moves
+    // through the group. This is what stops captions from appearing to
+    // type out one word at a time.
     private void startCaptionUpdates() {
         captionUpdateRunnable = new Runnable() {
             @Override
             public void run() {
-                if (mediaPlayer != null && mediaPlayer.isPlaying() &&
-                        captions != null && !captions.isEmpty()) {
+                if (mediaPlayer != null && mediaPlayer.isPlaying()
+                        && captionGroups != null && !captionGroups.isEmpty()) {
 
-                    long currentTimeMs = mediaPlayer.getCurrentPosition();
-                    float currentTimeSec = currentTimeMs / 1000.0f;
+                    float currentTimeSec = mediaPlayer.getCurrentPosition() / 1000.0f;
+                    int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
 
-                    int matchedIndex = -1;
-                    for (int i = 0; i < captions.size(); i++) {
-                        Caption cap = captions.get(i);
-                        if (currentTimeSec >= cap.startTime && currentTimeSec < cap.endTime) {
-                            matchedIndex = i;
-                            break;
-                        }
-                    }
-
-                    int anchorIndex = matchedIndex;
-                    if (anchorIndex == -1) {
-                        for (int i = 0; i < captions.size(); i++) {
-                            if (captions.get(i).startTime > currentTimeSec) {
-                                anchorIndex = Math.max(0, i - 1);
-                                break;
-                            }
-                        }
-                        if (anchorIndex == -1) {
-                            anchorIndex = captions.size() - 1;
-                        }
-                    }
-
-                    if (anchorIndex != lastAnchorIndex) {
-                        lastAnchorIndex = anchorIndex;
+                    if (groupIndex != -1) {
+                        CaptionGrouper.Group group = captionGroups.get(groupIndex);
+                        int activeIndex = group.nearestIndexAt(currentTimeSec);
 
                         boolean oneWordPunch = selectedStyle
                                 == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
 
-                        String beforeWord = (!oneWordPunch && anchorIndex - 1 >= 0)
-                                ? captions.get(anchorIndex - 1).word : "";
-                        String activeWord = captions.get(anchorIndex).word;
-                        String afterWord = (!oneWordPunch && anchorIndex + 1 < captions.size())
-                                ? captions.get(anchorIndex + 1).word : "";
-
-                        applySlotStyle(wordSlotBefore, beforeWord, false);
-                        applySlotStyle(wordSlotActive, activeWord, true);
-                        applySlotStyle(wordSlotAfter, afterWord, false);
+                        if (oneWordPunch) {
+                            wordSlotBefore.setText("");
+                            applySlotStyle(wordSlotActive, group.words.get(activeIndex), true);
+                            wordSlotAfter.setText("");
+                        } else {
+                            TextView[] slots = { wordSlotBefore, wordSlotActive, wordSlotAfter };
+                            for (int slotPos = 0; slotPos < slots.length; slotPos++) {
+                                if (slotPos >= group.words.size()) {
+                                    slots[slotPos].setText("");
+                                } else {
+                                    applySlotStyle(slots[slotPos], group.words.get(slotPos),
+                                            slotPos == activeIndex);
+                                }
+                            }
+                        }
 
                         autoSpaceSlots();
-                        playActiveWordTransition();
                     }
                 }
-                captionUpdateHandler.postDelayed(this, 33);
+                captionUpdateHandler.postDelayed(this, 100);
             }
         };
         captionUpdateHandler.post(captionUpdateRunnable);
@@ -938,9 +949,6 @@ private static final int CAPTION_GROUP_SIZE = 3;
                     }
                     mp.setLooping(true);
                     mp.start();
-                    playPauseButton.setEnabled(true);
-                    playPauseButton.setText("II");
-                    resyncCaptionEngineIfNeeded();
                 }
             });
 
@@ -964,9 +972,6 @@ private static final int CAPTION_GROUP_SIZE = 3;
         super.onDestroy();
 
         stopCaptionUpdates();
-        if (boxSlideAnimator != null) {
-            boxSlideAnimator.cancel();
-        }
 
         if (mediaPlayer != null) {
             mediaPlayer.release();
