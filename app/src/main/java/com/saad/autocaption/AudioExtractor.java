@@ -6,6 +6,7 @@ import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.net.Uri;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -99,7 +100,7 @@ public class AudioExtractor {
                     }
                 }
 
-                // Resample PCM from srcSampleRate to strict 16000 Hz Mono for Vosk model
+                // Strictly resample audio to 16000 Hz Mono WAV for accurate Vosk synchronization
                 write16kWavFile(tempPcm, wavFile, srcSampleRate, srcChannels);
 
                 File finalWav = wavFile;
@@ -131,7 +132,7 @@ public class AudioExtractor {
             int bytesRead;
             double resampleRatio = (double) srcSampleRate / targetSampleRate;
 
-            java.io.ByteArrayOutputStream rawStream = new java.io.ByteArrayOutputStream();
+            ByteArrayOutputStream rawStream = new ByteArrayOutputStream();
             while ((bytesRead = in.read(inBuffer)) != -1) {
                 rawStream.write(inBuffer, 0, bytesRead);
             }
