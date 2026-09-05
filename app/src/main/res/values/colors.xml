@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_primary">#121212</color>
+    <color name="white">#FFFFFF</color>
+    <color name="color_black">#000000</color>
+    <color name="caption_secondary">#CCCCCC</color>
+    <color name="control_bg">#1E1E1E</color>
+    <color name="text_muted">#AAAAAA</color>
+    <color name="btn_bg_dark">#333333</color>
+    <color name="accent_green">#00E676</color>
+</resources>
