@@ -108,9 +108,9 @@ public class VideoExporter {
                 String assPath = tempAss.getAbsolutePath().replace("\\", "/");
                 String fontsPath = fontsDir.getAbsolutePath().replace("\\", "/");
 
-                // Standard subtitle filter with compatible universal encoders
                 String vfFilter = "subtitles=filename='" + assPath + "':fontsdir='" + fontsPath + "'";
 
+                // Universal Android-supported LGPL MPEG-4 codec (avoids missing libx264 crash)
                 String cmd = String.format(
                         "-y -i \"%s\" -vf \"%s\" -c:v mpeg4 -q:v 3 -c:a aac -b:a 128k \"%s\"",
                         tempSource.getAbsolutePath(),
@@ -125,18 +125,20 @@ public class VideoExporter {
                     Uri galleryUri = saveToGallery(context, tempOutput);
                     mainHandler.post(() -> callback.onSuccess(galleryUri));
                 } else {
-                    String logs = session.getFailStackTrace();
-                    if (logs == null || logs.trim().isEmpty()) {
-                        logs = session.getOutput();
+                    String rawLogs = session.getFailStackTrace();
+                    if (rawLogs == null || rawLogs.trim().isEmpty()) {
+                        rawLogs = session.getOutput();
                     }
-                    if (logs != null && logs.length() > 250) {
-                        logs = logs.substring(logs.length() - 250);
+                    if (rawLogs != null && rawLogs.length() > 250) {
+                        rawLogs = rawLogs.substring(rawLogs.length() - 250);
                     }
-                    mainHandler.post(() -> callback.onError("Export failed: " + logs));
+                    final String errorOutput = "Export failed (" + returnCode + "): " + (rawLogs != null ? rawLogs : "Unknown error");
+                    mainHandler.post(() -> callback.onError(errorOutput));
                 }
 
             } catch (Exception e) {
-                mainHandler.post(() -> callback.onError("Export error: " + e.getMessage()));
+                final String caughtMsg = "Export error: " + e.getMessage();
+                mainHandler.post(() -> callback.onError(caughtMsg));
             } finally {
                 if (tempSource != null && tempSource.exists()) tempSource.delete();
                 if (tempAss != null && tempAss.exists()) tempAss.delete();
