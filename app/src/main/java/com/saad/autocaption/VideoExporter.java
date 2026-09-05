@@ -44,7 +44,7 @@ public class VideoExporter {
             ExportCallback callback) {
 
         Handler mainHandler = new Handler(Looper.getMainLooper());
-        callback.onProgress("Preparing export...");
+        mainHandler.post(() -> callback.onProgress("Preparing export..."));
 
         new Thread(() -> {
             File tempSource = null;
@@ -52,7 +52,6 @@ public class VideoExporter {
             File tempOutput = null;
 
             try {
-                // 1. Copy original source video to cache
                 tempSource = new File(context.getCacheDir(), "export_input_" + System.currentTimeMillis() + ".mp4");
                 try (InputStream in = context.getContentResolver().openInputStream(sourceVideoUri);
                      OutputStream out = new FileOutputStream(tempSource)) {
@@ -61,9 +60,9 @@ public class VideoExporter {
                     while ((len = in.read(buf)) > 0) {
                         out.write(buf, 0, len);
                     }
+                    out.flush();
                 }
 
-                // 2. Extract video dimensions
                 MediaMetadataRetriever mmr = new MediaMetadataRetriever();
                 mmr.setDataSource(tempSource.getAbsolutePath());
                 String rotStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
@@ -75,13 +74,11 @@ public class VideoExporter {
                 int videoWidth = (rotation == 90 || rotation == 270) ? rawH : rawW;
                 int videoHeight = (rotation == 90 || rotation == 270) ? rawW : rawH;
 
-                // 3. Prepare target export fonts
                 File fontsDir = new File(context.getCacheDir(), "export_fonts");
                 CaptionStyleOptions.prepareExportFont(context, configBefore.fontOption, fontsDir);
                 CaptionStyleOptions.prepareExportFont(context, configActive.fontOption, fontsDir);
                 CaptionStyleOptions.prepareExportFont(context, configAfter.fontOption, fontsDir);
 
-                // 4. Build 3-Slot ASS Subtitles
                 String assContent = AssSubtitleBuilder.build(
                         captions,
                         videoWidth,
@@ -99,11 +96,11 @@ public class VideoExporter {
                 tempAss = new File(context.getCacheDir(), "export_subs_" + System.currentTimeMillis() + ".ass");
                 try (FileOutputStream fos = new FileOutputStream(tempAss)) {
                     fos.write(assContent.getBytes("UTF-8"));
+                    fos.flush();
                 }
 
                 tempOutput = new File(context.getCacheDir(), "export_out_" + System.currentTimeMillis() + ".mp4");
 
-                // 5. FFmpeg Command Execution
                 mainHandler.post(() -> callback.onProgress("Baking captions into video..."));
 
                 String assEscaped = tempAss.getAbsolutePath()
@@ -163,6 +160,7 @@ public class VideoExporter {
             while ((len = in.read(buf)) > 0) {
                 out.write(buf, 0, len);
             }
+            out.flush();
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
