@@ -110,7 +110,6 @@ public class VideoExporter {
 
                 String vfFilter = "subtitles=filename='" + assPath + "':fontsdir='" + fontsPath + "'";
 
-                // Universal Android-supported LGPL MPEG-4 codec (avoids missing libx264 crash)
                 String cmd = String.format(
                         "-y -i \"%s\" -vf \"%s\" -c:v mpeg4 -q:v 3 -c:a aac -b:a 128k \"%s\"",
                         tempSource.getAbsolutePath(),
