@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Auto Caption</string>
+    <string name="desc_video_surface">Video preview</string>
+    <string name="desc_play_pause">Play or pause video</string>
+    <string name="desc_select_video">Select video</string>
+    <string name="desc_generate_captions">Generate captions</string>
+    <string name="desc_export">Export video with captions</string>
+    <string name="desc_slot_before">Slot: Before</string>
+    <string name="desc_slot_active">Slot: Active</string>
+    <string name="desc_slot_after">Slot: After</string>
+    <string name="desc_box_color">Choose caption box color</string>
+</resources>
