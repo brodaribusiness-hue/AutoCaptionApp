@@ -819,13 +819,13 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else {
-            Caption capBefore = (group.words.size() > 0) ? group.words.get(0) : null;
-            Caption capActive = (group.words.size() > 1) ? group.words.get(1) : ((group.words.size() == 1) ? group.words.get(0) : null);
-            Caption capAfter = (group.words.size() > 2) ? group.words.get(2) : null;
+            Caption capBefore = (safeActive - 1 >= 0) ? group.words.get(safeActive - 1) : null;
+            Caption capActive = group.words.get(safeActive);
+            Caption capAfter = (safeActive + 1 < group.words.size()) ? group.words.get(safeActive + 1) : null;
 
-            applySlotStyle(wordSlotBefore, capBefore, configSlotBefore, safeActive == 0);
-            applySlotStyle(wordSlotActive, capActive, configSlotActive, safeActive == 1 || group.words.size() == 1);
-            applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, safeActive == 2);
+            applySlotStyle(wordSlotBefore, capBefore, configSlotBefore, false);
+            applySlotStyle(wordSlotActive, capActive, configSlotActive, true);
+            applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, false);
         }
     }
 
