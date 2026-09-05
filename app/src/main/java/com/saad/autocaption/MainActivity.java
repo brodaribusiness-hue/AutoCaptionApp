@@ -780,7 +780,12 @@ public class MainActivity extends AppCompatActivity {
                 span = new PopScaleSpan(effectiveColor, 1.4f);
                 break;
             case BOX_HIGHLIGHT:
-                span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 14f);
+                // Only draw box when this slot is actively spoken
+                if (isActive) {
+                    span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 14f);
+                } else {
+                    span = new android.text.style.ForegroundColorSpan(effectiveColor);
+                }
                 break;
             case BOUNCE:
                 span = new BounceSpan(effectiveColor);
@@ -797,7 +802,7 @@ public class MainActivity extends AppCompatActivity {
             spannable.setSpan(span, 0, word.length(), 0);
         }
 
-        boolean skipBold = config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
+        boolean skipBold = (config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT && isActive);
         slot.setTypeface(config.typeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
         slot.setText(spannable);
     }
@@ -818,13 +823,14 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else {
-            Caption capBefore = (safeActive - 1 >= 0) ? group.words.get(safeActive - 1) : null;
-            Caption capActive = group.words.get(safeActive);
-            Caption capAfter = (safeActive + 1 < group.words.size()) ? group.words.get(safeActive + 1) : null;
+            // Sequential 3-word flow: box moves smoothly to 1st, 2nd, and 3rd word
+            Caption capBefore = (group.words.size() > 0) ? group.words.get(0) : null;
+            Caption capActive = (group.words.size() > 1) ? group.words.get(1) : null;
+            Caption capAfter = (group.words.size() > 2) ? group.words.get(2) : null;
 
-            applySlotStyle(wordSlotBefore, capBefore, configSlotBefore, false);
-            applySlotStyle(wordSlotActive, capActive, configSlotActive, true);
-            applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, false);
+            applySlotStyle(wordSlotBefore, capBefore, configSlotBefore, safeActive == 0);
+            applySlotStyle(wordSlotActive, capActive, configSlotActive, safeActive == 1);
+            applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, safeActive == 2);
         }
     }
 
