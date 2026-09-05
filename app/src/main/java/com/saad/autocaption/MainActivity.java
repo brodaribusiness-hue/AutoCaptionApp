@@ -4,6 +4,7 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
+import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -58,6 +59,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView timeText;
     private boolean isTrackingTouch = false;
 
+    // Slot Selection Controls
     private Button btnSlotBefore;
     private Button btnSlotActive;
     private Button btnSlotAfter;
@@ -65,13 +67,14 @@ public class MainActivity extends AppCompatActivity {
     private SlotStyleConfig configSlotBefore;
     private SlotStyleConfig configSlotActive;
     private SlotStyleConfig configSlotAfter;
-    private int currentSelectedSlotIndex = 1;
+    private int currentSelectedSlotIndex = 1; // 0 = Before, 1 = Active, 2 = After
     private boolean isUpdatingSpinnersProgrammatically = false;
 
     private Uri videoUri;
     private File extractedWavFile;
     private List<Caption> captions;
     private List<CaptionGrouper.Group> captionGroups;
+    private static final int CAPTION_GROUP_SIZE = CaptionGrouper.DEFAULT_GROUP_SIZE;
 
     private Handler captionUpdateHandler;
     private Runnable captionUpdateRunnable;
@@ -215,6 +218,7 @@ public class MainActivity extends AppCompatActivity {
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
         surfaceHolder = videoSurface.getHolder();
+        surfaceHolder.setFormat(PixelFormat.TRANSPARENT);
         videoSurface.setZOrderOnTop(false);
         videoSurface.setZOrderMediaOverlay(false);
 
@@ -709,7 +713,7 @@ public class MainActivity extends AppCompatActivity {
                                 }
 
                                 captions = parsed;
-                                captionGroups = CaptionGrouper.group(captions);
+                                captionGroups = CaptionGrouper.group(captions, CAPTION_GROUP_SIZE);
                                 statusText.setText("Captions ready! (" + captions.size() + " words)");
                                 generateCaptionsButton.setEnabled(true);
                                 exportButton.setEnabled(true);
@@ -772,10 +776,10 @@ public class MainActivity extends AppCompatActivity {
                 span = new android.text.style.ForegroundColorSpan(0xFF00E676);
                 break;
             case ONE_WORD_PUNCH:
-                span = new PopScaleSpan(effectiveColor, 1.35f);
+                span = new PopScaleSpan(effectiveColor, 1.4f);
                 break;
             case BOX_HIGHLIGHT:
-                span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 12f, 10f);
+                span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 12f);
                 break;
             case BOUNCE:
                 span = new BounceSpan(effectiveColor);
@@ -797,6 +801,18 @@ public class MainActivity extends AppCompatActivity {
         slot.setText(spannable);
     }
 
+    private void autoSpaceSlots() {
+        if (!activeSlotGesture.isPositionDragged()) {
+            wordSlotActive.setTranslationX(0f);
+        }
+        if (!beforeSlotGesture.isPositionDragged()) {
+            wordSlotBefore.setTranslationX(0f);
+        }
+        if (!afterSlotGesture.isPositionDragged()) {
+            wordSlotAfter.setTranslationX(0f);
+        }
+    }
+
     private void renderGroupSafe(CaptionGrouper.Group group, int activeIndex) {
         if (group == null || group.words == null || group.words.isEmpty()) {
             wordSlotBefore.setText("");
@@ -813,6 +829,7 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else {
+            // Sliding window: Center slot is always the active word being spoken
             Caption capBefore = (safeActive - 1 >= 0) ? group.words.get(safeActive - 1) : null;
             Caption capActive = group.words.get(safeActive);
             Caption capAfter = (safeActive + 1 < group.words.size()) ? group.words.get(safeActive + 1) : null;
@@ -821,6 +838,7 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, capActive, configSlotActive, true);
             applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, false);
         }
+        autoSpaceSlots();
     }
 
     private void triggerManualCaptionRedraw() {
