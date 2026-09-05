@@ -74,7 +74,6 @@ public class MainActivity extends AppCompatActivity {
     private File extractedWavFile;
     private List<Caption> captions;
     private List<CaptionGrouper.Group> captionGroups;
-    private static final int CAPTION_GROUP_SIZE = CaptionGrouper.DEFAULT_GROUP_SIZE;
 
     private Handler captionUpdateHandler;
     private Runnable captionUpdateRunnable;
@@ -217,15 +216,10 @@ public class MainActivity extends AppCompatActivity {
 
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
-        // CRITICAL FIX: Explicitly place SurfaceView behind caption views
         surfaceHolder = videoSurface.getHolder();
         surfaceHolder.setFormat(PixelFormat.TRANSPARENT);
         videoSurface.setZOrderOnTop(false);
         videoSurface.setZOrderMediaOverlay(false);
-
-        // Force bring captions layer to the absolute front
-        captionLayer.bringToFront();
-        captionLayer.invalidate();
 
         surfaceHolder.addCallback(new SurfaceHolder.Callback() {
             @Override
@@ -718,7 +712,7 @@ public class MainActivity extends AppCompatActivity {
                                 }
 
                                 captions = parsed;
-                                captionGroups = CaptionGrouper.group(captions, CAPTION_GROUP_SIZE);
+                                captionGroups = CaptionGrouper.group(captions);
                                 statusText.setText("Captions ready! (" + captions.size() + " words)");
                                 generateCaptionsButton.setEnabled(true);
                                 exportButton.setEnabled(true);
@@ -784,7 +778,7 @@ public class MainActivity extends AppCompatActivity {
                 span = new KaraokeFillSpan(0xFFFFFFFF, effectiveColor, 8f);
                 break;
             case ONE_WORD_PUNCH:
-                span = new PopScaleSpan(effectiveColor, 1.4f);
+                span = new PopScaleSpan(effectiveColor, 1.35f);
                 break;
             case BOX_HIGHLIGHT:
                 span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 12f, 10f);
@@ -841,7 +835,7 @@ public class MainActivity extends AppCompatActivity {
             try {
                 float currentTimeSec = mediaPlayer.getCurrentPosition() / 1000.0f;
                 int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
-                if (groupIndex != -1) {
+                if (groupIndex != -1 && groupIndex < captionGroups.size()) {
                     CaptionGrouper.Group group = captionGroups.get(groupIndex);
                     int activeIndex = group.nearestIndexAt(currentTimeSec);
                     renderGroupSafe(group, activeIndex);
