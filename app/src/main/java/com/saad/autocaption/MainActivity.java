@@ -798,9 +798,9 @@ public class MainActivity extends AppCompatActivity {
             spannable.setSpan(span, 0, word.length(), 0);
         }
 
-        boolean skipBold = config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
+                boolean skipBold = config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
         slot.setTypeface(config.typeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
-                slot.setText(spannable);
+        slot.setText(spannable);
     }
 
     private void renderGroupSafe(CaptionGrouper.Group group, int activeIndex) {
@@ -819,7 +819,7 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else {
-            // Sliding window: Active word center slot mein highlight hota hai[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span)
+            // Dynamic sliding triplet window centered on the actively spoken word
             Caption capBefore = (safeActive - 1 >= 0) ? group.words.get(safeActive - 1) : null;
             Caption capActive = group.words.get(safeActive);
             Caption capAfter = (safeActive + 1 < group.words.size()) ? group.words.get(safeActive + 1) : null;
@@ -831,10 +831,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void triggerManualCaptionRedraw() {
-
         if (mediaPlayer != null && captionGroups != null && !captionGroups.isEmpty()) {
             try {
                 float currentTimeSec = mediaPlayer.getCurrentPosition() / 1000.0f;
+
                 int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
                 if (groupIndex != -1 && groupIndex < captionGroups.size()) {
                     CaptionGrouper.Group group = captionGroups.get(groupIndex);
