@@ -4,12 +4,16 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:background="#121212">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
+        android:clipChildren="false"
+        android:clipToPadding="false"
         android:padding="16dp">
 
         <TextView
@@ -27,6 +31,8 @@
             android:layout_width="match_parent"
             android:layout_height="320dp"
             android:layout_gravity="center_horizontal"
+            android:clipChildren="false"
+            android:clipToPadding="false"
             android:background="#000000">
 
             <SurfaceView
@@ -34,15 +40,12 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
-            <!-- Single Horizontal Center Ribbon for Captions -->
             <LinearLayout
                 android:id="@+id/captionLayer"
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom|center_horizontal"
+                android:layout_height="match_parent"
                 android:gravity="center"
                 android:orientation="horizontal"
-                android:layout_marginBottom="45dp"
                 android:elevation="30dp"
                 android:clipChildren="false"
                 android:clipToPadding="false">
@@ -53,22 +56,18 @@
                     android:layout_height="wrap_content"
                     android:textColor="#CCCCCC"
                     android:textSize="22sp"
-                    android:paddingStart="4dp"
-                    android:paddingEnd="4dp"
-                    android:gravity="center"
-                    android:minWidth="20dp" />
+                    android:elevation="35dp"
+                    android:padding="6dp" />
 
                 <TextView
                     android:id="@+id/wordSlotActive"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="#FFFF00"
+                    android:textColor="#FFFFFF"
                     android:textStyle="bold"
-                    android:textSize="24sp"
-                    android:paddingStart="6dp"
-                    android:paddingEnd="6dp"
-                    android:gravity="center"
-                    android:minWidth="20dp" />
+                    android:textSize="22sp"
+                    android:elevation="35dp"
+                    android:padding="6dp" />
 
                 <TextView
                     android:id="@+id/wordSlotAfter"
@@ -76,10 +75,8 @@
                     android:layout_height="wrap_content"
                     android:textColor="#CCCCCC"
                     android:textSize="22sp"
-                    android:paddingStart="4dp"
-                    android:paddingEnd="4dp"
-                    android:gravity="center"
-                    android:minWidth="20dp" />
+                    android:elevation="35dp"
+                    android:padding="6dp" />
 
             </LinearLayout>
 
@@ -152,6 +149,7 @@
 
         </LinearLayout>
 
+        <!-- Slot Picker Tab Bar -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
