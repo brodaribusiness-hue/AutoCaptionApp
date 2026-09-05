@@ -77,7 +77,6 @@ public class CaptionStyleOptions {
         }
     }
 
-    // Karaoke flow removed completely
     public enum CaptionStyleType {
         HIGHLIGHT_POP,
         GREEN_EMPHASIS,
