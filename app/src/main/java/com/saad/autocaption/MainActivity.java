@@ -216,8 +216,15 @@ public class MainActivity extends AppCompatActivity {
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
         surfaceHolder = videoSurface.getHolder();
-        surfaceHolder.setFormat(PixelFormat.TRANSLUCENT);
-        videoSurface.setZOrderMediaOverlay(true);
+// SurfaceView ko overlay layer se hata kar standard window layer par le aayein
+videoSurface.setZOrderMediaOverlay(false);
+
+// Captions layer ko hardware surface ke upar force-render karein
+wordSlotBefore.bringToFront();
+wordSlotActive.bringToFront();
+wordSlotAfter.bringToFront();
+findViewById(R.id.captionLayer).bringToFront();
+
 
         surfaceHolder.addCallback(new SurfaceHolder.Callback() {
             @Override
