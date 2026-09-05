@@ -4,7 +4,7 @@ import android.content.Context;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
-import android.view.ViewGroup;
+import android.view.ViewParent;
 
 public class SlotGestureHelper implements View.OnTouchListener {
 
@@ -12,9 +12,6 @@ public class SlotGestureHelper implements View.OnTouchListener {
     private float lastTouchX;
     private float lastTouchY;
     private float currentScale = 1f;
-
-    // Tracks whether the user has manually dragged this slot's
-    // position — once true, auto-spacing stops touching translationX/Y.
     private boolean positionDragged = false;
 
     public SlotGestureHelper(Context context) {
@@ -23,7 +20,7 @@ public class SlotGestureHelper implements View.OnTouchListener {
                     @Override
                     public boolean onScale(ScaleGestureDetector detector) {
                         currentScale *= detector.getScaleFactor();
-                        currentScale = Math.max(0.4f, Math.min(currentScale, 4f));
+                        currentScale = Math.max(0.4f, Math.min(currentScale, 4.0f));
                         return true;
                     }
                 });
@@ -37,10 +34,6 @@ public class SlotGestureHelper implements View.OnTouchListener {
             case MotionEvent.ACTION_DOWN:
                 lastTouchX = event.getRawX();
                 lastTouchY = event.getRawY();
-                // FIX: the root layout is a ScrollView. Without this,
-                // ScrollView steals touch events mid-gesture for its own
-                // vertical scroll, which is what made dragging feel
-                // laggy/interrupted instead of smooth.
                 requestParentDisallowIntercept(view, true);
                 break;
 
@@ -52,33 +45,19 @@ public class SlotGestureHelper implements View.OnTouchListener {
                     float newX = view.getTranslationX() + dx;
                     float newY = view.getTranslationY() + dy;
 
-                    if (view.getParent() instanceof ViewGroup) {
-                        ViewGroup parent = (ViewGroup) view.getParent();
-                        int parentWidth = parent.getWidth();
-                        int parentHeight = parent.getHeight();
+                    // Calculate bounds relative to preview container so Up-Down movement is never blocked
+                    View container = findPreviewContainer(view);
+                    if (container != null && container.getWidth() > 0 && container.getHeight() > 0) {
+                        float limitX = container.getWidth() * 0.48f;
+                        float limitY = container.getHeight() * 0.48f;
 
-                        if (parentWidth > 0 && parentHeight > 0) {
-                            float halfW = (view.getWidth() * currentScale) / 2f;
-                            float halfH = (view.getHeight() * currentScale) / 2f;
-                            float centerX = view.getLeft() + view.getWidth() / 2f;
-                            float centerY = view.getTop() + view.getHeight() / 2f;
-
-                            float minX = -centerX + halfW;
-                            float maxX = parentWidth - centerX - halfW;
-                            float minY = -centerY + halfH;
-                            float maxY = parentHeight - centerY - halfH;
-
-                            if (minX <= maxX) {
-                                newX = Math.max(minX, Math.min(newX, maxX));
-                            }
-                            if (minY <= maxY) {
-                                newY = Math.max(minY, Math.min(newY, maxY));
-                            }
-                        }
+                        newX = Math.max(-limitX, Math.min(newX, limitX));
+                        newY = Math.max(-limitY, Math.min(newY, limitY));
                     }
 
                     view.setTranslationX(newX);
                     view.setTranslationY(newY);
+
                     lastTouchX = event.getRawX();
                     lastTouchY = event.getRawY();
                     positionDragged = true;
@@ -98,6 +77,18 @@ public class SlotGestureHelper implements View.OnTouchListener {
         view.setScaleX(currentScale);
         view.setScaleY(currentScale);
         return true;
+    }
+
+    private View findPreviewContainer(View view) {
+        ViewParent parent = view.getParent();
+        while (parent instanceof View) {
+            View parentView = (View) parent;
+            if (parentView instanceof AspectRatioFrameLayout) {
+                return parentView;
+            }
+            parent = parent.getParent();
+        }
+        return (view.getParent() instanceof View) ? (View) view.getParent() : null;
     }
 
     private void requestParentDisallowIntercept(View view, boolean disallow) {
