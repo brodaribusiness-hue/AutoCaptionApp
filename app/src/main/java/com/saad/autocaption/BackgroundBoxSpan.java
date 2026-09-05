@@ -11,19 +11,33 @@ public class BackgroundBoxSpan extends ReplacementSpan {
     private final int textColor;
     private final int boxColor;
     private final float cornerRadius;
+    private final float customPadding;
+    private final boolean useDynamicPadding;
 
+    // 3-Argument Constructor (Auto dynamic padding based on text size)
     public BackgroundBoxSpan(int textColor, int boxColor, float cornerRadiusPx) {
         this.textColor = textColor;
         this.boxColor = boxColor;
         this.cornerRadius = cornerRadiusPx;
+        this.customPadding = 0f;
+        this.useDynamicPadding = true;
+    }
+
+    // 4-Argument Constructor (Explicit padding & corner radius)
+    public BackgroundBoxSpan(int textColor, int boxColor, float paddingPx, float cornerRadiusPx) {
+        this.textColor = textColor;
+        this.boxColor = boxColor;
+        this.customPadding = paddingPx;
+        this.cornerRadius = cornerRadiusPx;
+        this.useDynamicPadding = false;
     }
 
     private float getHorizontalPadding(Paint paint) {
-        return paint.getTextSize() * 0.30f;
+        return useDynamicPadding ? (paint.getTextSize() * 0.30f) : customPadding;
     }
 
     private float getVerticalPadding(Paint paint) {
-        return paint.getTextSize() * 0.18f;
+        return useDynamicPadding ? (paint.getTextSize() * 0.18f) : (customPadding * 0.55f);
     }
 
     @Override
@@ -66,7 +80,7 @@ public class BackgroundBoxSpan extends ReplacementSpan {
         paint.setColor(boxColor);
         canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint);
 
-        // 2. Exact Centered Text placement
+        // 2. Centered Text placement
         float textX = x + hPad;
         float textY = y;
 
