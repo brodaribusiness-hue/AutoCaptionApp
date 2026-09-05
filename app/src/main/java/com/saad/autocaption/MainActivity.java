@@ -803,7 +803,7 @@ public class MainActivity extends AppCompatActivity {
         slot.setText(spannable);
     }
 
-    private void renderGroupSafe(CaptionGrouper.Group group, int activeIndex) {
+        private void renderGroupSafe(CaptionGrouper.Group group, int activeIndex) {
         if (group == null || group.words == null || group.words.isEmpty()) {
             wordSlotBefore.setText("");
             wordSlotActive.setText("");
@@ -819,6 +819,7 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else {
+            // Dynamic sliding window: active word center slot mein highlight hoga[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
             Caption capBefore = (safeActive - 1 >= 0) ? group.words.get(safeActive - 1) : null;
             Caption capActive = group.words.get(safeActive);
             Caption capAfter = (safeActive + 1 < group.words.size()) ? group.words.get(safeActive + 1) : null;
@@ -828,6 +829,7 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, false);
         }
     }
+
 
     private void triggerManualCaptionRedraw() {
         if (mediaPlayer != null && captionGroups != null && !captionGroups.isEmpty()) {
