@@ -234,16 +234,13 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-                selectVideoButton.setOnClickListener(v -> {
-            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-            intent.setType("video/*");
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.addFlags(
-                    Intent.FLAG_GRANT_READ_URI_PERMISSION
-                            | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
-            );
-            pickVideoLauncher.launch(intent);
-        });
+            selectVideoButton.setOnClickListener(v -> {
+    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+    intent.setType("video/*");
+    intent.addCategory(Intent.CATEGORY_OPENABLE);
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+    pickVideoLauncher.launch(intent);
+});
 
         generateCaptionsButton.setOnClickListener(v -> {
             if (videoUri != null) {
