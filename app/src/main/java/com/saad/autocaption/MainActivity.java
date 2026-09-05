@@ -222,6 +222,8 @@ public class MainActivity extends AppCompatActivity {
         videoSurface.setZOrderOnTop(false);
         videoSurface.setZOrderMediaOverlay(false);
 
+        captionLayer.bringToFront();
+
         surfaceHolder.addCallback(new SurfaceHolder.Callback() {
             @Override
             public void surfaceCreated(SurfaceHolder holder) {
@@ -779,7 +781,7 @@ public class MainActivity extends AppCompatActivity {
                 span = new PopScaleSpan(effectiveColor, 1.4f);
                 break;
             case BOX_HIGHLIGHT:
-                span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 12f);
+                span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 12f, 10f);
                 break;
             case BOUNCE:
                 span = new BounceSpan(effectiveColor);
@@ -801,18 +803,6 @@ public class MainActivity extends AppCompatActivity {
         slot.setText(spannable);
     }
 
-    private void autoSpaceSlots() {
-        if (!activeSlotGesture.isPositionDragged()) {
-            wordSlotActive.setTranslationX(0f);
-        }
-        if (!beforeSlotGesture.isPositionDragged()) {
-            wordSlotBefore.setTranslationX(0f);
-        }
-        if (!afterSlotGesture.isPositionDragged()) {
-            wordSlotAfter.setTranslationX(0f);
-        }
-    }
-
     private void renderGroupSafe(CaptionGrouper.Group group, int activeIndex) {
         if (group == null || group.words == null || group.words.isEmpty()) {
             wordSlotBefore.setText("");
@@ -829,16 +819,14 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else {
-            // Sliding window: Center slot is always the active word being spoken
-            Caption capBefore = (safeActive - 1 >= 0) ? group.words.get(safeActive - 1) : null;
-            Caption capActive = group.words.get(safeActive);
-            Caption capAfter = (safeActive + 1 < group.words.size()) ? group.words.get(safeActive + 1) : null;
+            Caption capBefore = (group.words.size() > 0) ? group.words.get(0) : null;
+            Caption capActive = (group.words.size() > 1) ? group.words.get(1) : ((group.words.size() == 1) ? group.words.get(0) : null);
+            Caption capAfter = (group.words.size() > 2) ? group.words.get(2) : null;
 
-            applySlotStyle(wordSlotBefore, capBefore, configSlotBefore, false);
-            applySlotStyle(wordSlotActive, capActive, configSlotActive, true);
-            applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, false);
+            applySlotStyle(wordSlotBefore, capBefore, configSlotBefore, safeActive == 0);
+            applySlotStyle(wordSlotActive, capActive, configSlotActive, safeActive == 1 || group.words.size() == 1);
+            applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, safeActive == 2);
         }
-        autoSpaceSlots();
     }
 
     private void triggerManualCaptionRedraw() {
