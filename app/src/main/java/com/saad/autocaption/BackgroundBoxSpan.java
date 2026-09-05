@@ -38,29 +38,24 @@ public class BackgroundBoxSpan extends ReplacementSpan {
         float textWidth = paint.measureText(text, start, end);
         float boxWidth = textWidth + (horizontalPadding * 2f);
 
-        // Calculate bounded rect for background box
         RectF rect = new RectF(x, top, x + boxWidth, bottom);
 
         int originalColor = paint.getColor();
         Paint.Style originalStyle = paint.getStyle();
 
-        // 1. Draw rounded box
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(boxColor);
         canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint);
 
-        // 2. Strict baseline vertical and horizontal centering calculation
         float textX = x + horizontalPadding;
         float textY = rect.centerY() - ((paint.descent() + paint.ascent()) / 2f);
 
-        // 3. Subtle shadow depth
         float[] hsv = new float[3];
         Color.colorToHSV(textColor, hsv);
         int depthColor = Color.HSVToColor(new float[]{hsv[0], hsv[1], Math.max(hsv[2] * 0.35f, 0.08f)});
         paint.setColor(depthColor);
         canvas.drawText(text, start, end, textX + 1.5f, textY + 1.5f, paint);
 
-        // 4. Foreground active text centered
         paint.setColor(textColor);
         canvas.drawText(text, start, end, textX, textY, paint);
 
