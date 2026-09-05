@@ -101,6 +101,7 @@ public class MainActivity extends AppCompatActivity {
         CaptionStyleOptions.FontOption defaultFont = CaptionStyleOptions.getFontOptions()[0];
         Typeface defaultTf = CaptionStyleOptions.resolveTypeface(this, defaultFont);
 
+        // Box highlight replaced completely with standard Glow Pop
         configSlotBefore = new SlotStyleConfig(defaultFont, defaultTf, 0xFFCCCCCC,
                 CaptionStyleOptions.CaptionStyleType.GLOW_POP, 0x00000000);
         configSlotActive = new SlotStyleConfig(defaultFont, defaultTf, 0xFFFFEA00,
@@ -249,7 +250,7 @@ public class MainActivity extends AppCompatActivity {
                 captions = null;
                 captionGroups = null;
 
-                // Reset coordinates to perfect center across all aspect ratios (1:1, 9:16, 16:9)
+                // Reset coordinates to center for any aspect ratio (1:1, 9:16, 16:9)
                 resetSlotPositionsToCenter();
 
                 wordSlotBefore.setText("");
@@ -687,7 +688,7 @@ public class MainActivity extends AppCompatActivity {
 
         slot.setTypeface(config.typeface);
 
-        // Inactive words render clean with outline
+        // Inactive words render clean with subtle shadow
         if (!isActiveSpeaking) {
             slot.setText(word);
             slot.setTextColor(effectiveColor);
@@ -696,7 +697,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Active Speaking Word Glowing logic
+        // Active Speaking Word Styling
         android.text.SpannableString spannable = new android.text.SpannableString(word);
         Object span = null;
 
@@ -749,7 +750,7 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else if (cumulativeBuildUp) {
-            // Typewriter / Cumulative Word Build-Up Flow
+            // Typewriter / Cumulative Build-Up Flow
             Caption cap1 = (group.words.size() > 0) ? group.words.get(0) : null;
             Caption cap2 = (group.words.size() > 1) ? group.words.get(1) : null;
             Caption cap3 = (group.words.size() > 2) ? group.words.get(2) : null;
@@ -768,7 +769,7 @@ public class MainActivity extends AppCompatActivity {
                 applySlotStyle(wordSlotAfter, cap3, configSlotAfter, true);
             }
         } else {
-            // Sequential Glowing Flow across all other styles (1 -> 2 -> 3)
+            // Sequential Glowing Flow (1 -> 2 -> 3)
             Caption cap1 = (group.words.size() > 0) ? group.words.get(0) : null;
             Caption cap2 = (group.words.size() > 1) ? group.words.get(1) : null;
             Caption cap3 = (group.words.size() > 2) ? group.words.get(2) : null;
