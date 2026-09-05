@@ -75,6 +75,8 @@ public class VideoExporter {
                 int videoHeight = (rotation == 90 || rotation == 270) ? rawW : rawH;
 
                 File fontsDir = new File(context.getCacheDir(), "export_fonts");
+                if (!fontsDir.exists()) fontsDir.mkdirs();
+
                 CaptionStyleOptions.prepareExportFont(context, configBefore.fontOption, fontsDir);
                 CaptionStyleOptions.prepareExportFont(context, configActive.fontOption, fontsDir);
                 CaptionStyleOptions.prepareExportFont(context, configAfter.fontOption, fontsDir);
@@ -103,31 +105,35 @@ public class VideoExporter {
 
                 mainHandler.post(() -> callback.onProgress("Baking captions into video..."));
 
-                String assEscaped = tempAss.getAbsolutePath()
-                        .replace("\\", "/")
-                        .replace(":", "\\:")
-                        .replace("'", "\\'");
-                String fontsEscaped = fontsDir.getAbsolutePath()
-                        .replace("\\", "/")
-                        .replace(":", "\\:")
-                        .replace("'", "\\'");
+                // Clean paths for FFmpeg filtergraph
+                String assPath = tempAss.getAbsolutePath().replace("\\", "/");
+                String fontsPath = fontsDir.getAbsolutePath().replace("\\", "/");
 
-                String vfFilter = String.format("subtitles='%s':fontsdir='%s'", assEscaped, fontsEscaped);
+                // Standard subtitle filter syntax
+                String vfFilter = "subtitles=filename='" + assPath + "':fontsdir='" + fontsPath + "'";
 
                 String cmd = String.format(
-                        "-y -i \"%s\" -vf \"%s\" -c:v libx264 -preset fast -crf 22 -c:a copy \"%s\"",
+                        "-y -i \"%s\" -vf \"%s\" -c:v libx264 -preset ultrafast -crf 22 -c:a aac -b:a 128k \"%s\"",
                         tempSource.getAbsolutePath(),
                         vfFilter,
                         tempOutput.getAbsolutePath());
 
                 FFmpegSession session = FFmpegKit.execute(cmd);
+                ReturnCode returnCode = session.getReturnCode();
 
-                if (ReturnCode.isSuccess(session.getReturnCode())) {
+                if (ReturnCode.isSuccess(returnCode) && tempOutput.exists() && tempOutput.length() > 1024) {
                     mainHandler.post(() -> callback.onProgress("Saving to gallery..."));
                     Uri galleryUri = saveToGallery(context, tempOutput);
                     mainHandler.post(() -> callback.onSuccess(galleryUri));
                 } else {
-                    String failMsg = "FFmpeg failed with state: " + session.getState();
+                    String logs = session.getFailStackTrace();
+                    if (logs == null || logs.trim().isEmpty()) {
+                        logs = session.getOutput();
+                    }
+                    if (logs != null && logs.length() > 200) {
+                        logs = logs.substring(logs.length() - 200);
+                    }
+                    String failMsg = "FFmpeg failed (" + returnCode + "): " + logs;
                     mainHandler.post(() -> callback.onError(failMsg));
                 }
 
