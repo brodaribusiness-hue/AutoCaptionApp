@@ -4,7 +4,6 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.PixelFormat;
 import android.graphics.Typeface;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -59,7 +58,6 @@ public class MainActivity extends AppCompatActivity {
     private TextView timeText;
     private boolean isTrackingTouch = false;
 
-    // Slot Selection Controls
     private Button btnSlotBefore;
     private Button btnSlotActive;
     private Button btnSlotAfter;
@@ -67,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
     private SlotStyleConfig configSlotBefore;
     private SlotStyleConfig configSlotActive;
     private SlotStyleConfig configSlotAfter;
-    private int currentSelectedSlotIndex = 1; // 0 = Before, 1 = Active, 2 = After
+    private int currentSelectedSlotIndex = 1;
     private boolean isUpdatingSpinnersProgrammatically = false;
 
     private Uri videoUri;
@@ -217,7 +215,6 @@ public class MainActivity extends AppCompatActivity {
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
         surfaceHolder = videoSurface.getHolder();
-        surfaceHolder.setFormat(PixelFormat.TRANSPARENT);
         videoSurface.setZOrderOnTop(false);
         videoSurface.setZOrderMediaOverlay(false);
 
@@ -753,7 +750,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         String word = caption.word;
-        int effectiveColor = (caption.customColor != 0) ? caption.customColor : config.textColor;
+        int effectiveColor = caption.resolveColor(config.textColor);
 
         slot.setTypeface(config.typeface);
 
@@ -820,13 +817,13 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else {
-            Caption capBefore = (group.words.size() > 0) ? group.words.get(0) : null;
-            Caption capActive = (group.words.size() > 1) ? group.words.get(1) : ((group.words.size() == 1) ? group.words.get(0) : null);
-            Caption capAfter = (group.words.size() > 2) ? group.words.get(2) : null;
+            Caption capBefore = (safeActive - 1 >= 0) ? group.words.get(safeActive - 1) : null;
+            Caption capActive = group.words.get(safeActive);
+            Caption capAfter = (safeActive + 1 < group.words.size()) ? group.words.get(safeActive + 1) : null;
 
-            applySlotStyle(wordSlotBefore, capBefore, configSlotBefore, safeActive == 0);
-            applySlotStyle(wordSlotActive, capActive, configSlotActive, safeActive == 1 || group.words.size() == 1);
-            applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, safeActive == 2);
+            applySlotStyle(wordSlotBefore, capBefore, configSlotBefore, false);
+            applySlotStyle(wordSlotActive, capActive, configSlotActive, true);
+            applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, false);
         }
     }
 
