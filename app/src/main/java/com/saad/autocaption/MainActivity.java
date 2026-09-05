@@ -20,6 +20,7 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Spinner;
@@ -45,6 +46,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView wordSlotBefore;
     private TextView wordSlotActive;
     private TextView wordSlotAfter;
+    private FrameLayout captionLayer;
     private Button generateCaptionsButton;
     private Button exportButton;
     private Button boxColorButton;
@@ -58,7 +60,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView timeText;
     private boolean isTrackingTouch = false;
 
-    // Slot Controls
+    // Slot Selection Controls
     private Button btnSlotBefore;
     private Button btnSlotActive;
     private Button btnSlotAfter;
@@ -129,6 +131,7 @@ public class MainActivity extends AppCompatActivity {
 
         videoSurface = findViewById(R.id.videoSurface);
         videoPreviewContainer = findViewById(R.id.videoPreviewContainer);
+        captionLayer = findViewById(R.id.captionLayer);
         wordSlotBefore = findViewById(R.id.wordSlotBefore);
         wordSlotActive = findViewById(R.id.wordSlotActive);
         wordSlotAfter = findViewById(R.id.wordSlotAfter);
@@ -169,6 +172,14 @@ public class MainActivity extends AppCompatActivity {
 
         afterSlotGesture = new SlotGestureHelper(this);
         wordSlotAfter.setOnTouchListener(afterSlotGesture);
+
+        // Bring captions to the foreground above SurfaceView
+        if (captionLayer != null) {
+            captionLayer.bringToFront();
+        }
+        wordSlotBefore.bringToFront();
+        wordSlotActive.bringToFront();
+        wordSlotAfter.bringToFront();
 
         generateCaptionsButton.setEnabled(false);
         exportButton.setEnabled(false);
@@ -215,16 +226,10 @@ public class MainActivity extends AppCompatActivity {
 
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
+        // Setup SurfaceView layer: Standard layer with alpha transparency so captions stay visible
         surfaceHolder = videoSurface.getHolder();
-// SurfaceView ko overlay layer se hata kar standard window layer par le aayein
-videoSurface.setZOrderMediaOverlay(false);
-
-// Captions layer ko hardware surface ke upar force-render karein
-wordSlotBefore.bringToFront();
-wordSlotActive.bringToFront();
-wordSlotAfter.bringToFront();
-findViewById(R.id.captionLayer).bringToFront();
-
+        surfaceHolder.setFormat(PixelFormat.TRANSLUCENT);
+        videoSurface.setZOrderOnTop(false);
 
         surfaceHolder.addCallback(new SurfaceHolder.Callback() {
             @Override
@@ -706,7 +711,6 @@ findViewById(R.id.captionLayer).bringToFront();
 
                     @Override
                     public void onSuccess(List<String> jsonResults) {
-                        // Crash guard: Safe parsing to prevent unexpected force close at 100%
                         runOnUiThread(() -> {
                             if (requestId != currentRequestId) return;
                             try {
@@ -731,7 +735,7 @@ findViewById(R.id.captionLayer).bringToFront();
                                 startCaptionUpdates();
 
                             } catch (Throwable t) {
-                                Log.e(TAG, "Error finalizing captions at 100%", t);
+                                Log.e(TAG, "Error finalizing captions", t);
                                 statusText.setText("Parsing error: " + t.getMessage());
                                 generateCaptionsButton.setEnabled(true);
                             }
