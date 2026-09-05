@@ -6,53 +6,46 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.text.style.ReplacementSpan;
 
-/** Background highlight box dynamically scaled to text size and font metrics. */
 public class BackgroundBoxSpan extends ReplacementSpan {
     private final int textColor;
     private final int boxColor;
     private final float cornerRadius;
+    private final float paddingPx;
 
     public BackgroundBoxSpan(int textColor, int boxColor, float cornerRadiusPx) {
         this.textColor = textColor;
         this.boxColor = boxColor;
         this.cornerRadius = cornerRadiusPx;
+        this.paddingPx = 18f;
     }
 
     public BackgroundBoxSpan(int textColor, int boxColor, float paddingPx, float cornerRadiusPx) {
         this.textColor = textColor;
         this.boxColor = boxColor;
+        this.paddingPx = paddingPx;
         this.cornerRadius = cornerRadiusPx;
-    }
-
-    private float getHorizontalPadding(Paint paint) {
-        return paint.getTextSize() * 0.32f;
-    }
-
-    private float getVerticalPadding(Paint paint) {
-        return paint.getTextSize() * 0.22f;
     }
 
     @Override
     public int getSize(Paint paint, CharSequence text, int start, int end, Paint.FontMetricsInt fm) {
-        float hPad = getHorizontalPadding(paint);
-        float vPad = getVerticalPadding(paint);
+        float horizontalPad = paddingPx * 1.2f;
+        float verticalPad = paddingPx * 0.6f;
 
         if (fm != null) {
-            int extra = Math.round(vPad);
+            int extra = Math.round(verticalPad);
             fm.ascent -= extra;
             fm.top -= extra;
             fm.descent += extra;
             fm.bottom += extra;
         }
-        return Math.round(paint.measureText(text, start, end) + (hPad * 2f));
+        return Math.round(paint.measureText(text, start, end) + (horizontalPad * 2f));
     }
 
     @Override
-    public void draw(Canvas canvas, CharSequence text, int start, int end,
-                      float x, int top, int y, int bottom, Paint paint) {
+    public void draw(Canvas canvas, CharSequence text, int start, int end, float x, int top, int y, int bottom, Paint paint) {
         float textWidth = paint.measureText(text, start, end);
-        float hPad = getHorizontalPadding(paint);
-        float vPad = getVerticalPadding(paint);
+        float hPad = paddingPx * 1.2f;
+        float vPad = paddingPx * 0.6f;
 
         Paint.FontMetrics fm = paint.getFontMetrics();
         float boxTop = y + fm.ascent - vPad;
@@ -65,22 +58,14 @@ public class BackgroundBoxSpan extends ReplacementSpan {
         int originalColor = paint.getColor();
         Paint.Style originalStyle = paint.getStyle();
 
-        // 1. Draw rounded box with proportional metrics
+        // 1. Draw rounded box with exact boundary
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(boxColor);
         canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint);
 
-        // 2. Text shadow for contrast
-        float textX = x + hPad;
-        float[] hsv = new float[3];
-        Color.colorToHSV(textColor, hsv);
-        int depthColor = Color.HSVToColor(160, new float[]{hsv[0], hsv[1], Math.max(hsv[2] * 0.30f, 0.05f)});
-        paint.setColor(depthColor);
-        canvas.drawText(text, start, end, textX + 1.5f, y + 1.5f, paint);
-
-        // 3. Crisp Foreground Text
+        // 2. Center Text inside the box
         paint.setColor(textColor);
-        canvas.drawText(text, start, end, textX, y, paint);
+        canvas.drawText(text, start, end, x + hPad, y, paint);
 
         paint.setColor(originalColor);
         paint.setStyle(originalStyle);
