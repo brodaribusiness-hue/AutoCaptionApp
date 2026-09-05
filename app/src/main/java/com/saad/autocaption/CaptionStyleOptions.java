@@ -13,9 +13,9 @@ public class CaptionStyleOptions {
 
     public static class FontOption {
         public final String label;
-        public final String assetFileName;   // "fonts/..." path under assets
+        public final String assetFileName;   // Path under assets/
         public final Typeface builtInTypeface;
-        public final String exportFamilyName; // Font name for .ass subtitle
+        public final String exportFamilyName; // Clean font name for .ass subtitle
         public final String systemFontFile;   // Filename under /system/fonts
 
         FontOption(String label, String assetFileName, Typeface builtInTypeface, String exportFamilyName, String systemFontFile) {
@@ -109,7 +109,7 @@ public class CaptionStyleOptions {
                 new FontOption("Modern (Roboto)", null, Typeface.SANS_SERIF, "Roboto", "Roboto-Regular.ttf"),
                 new FontOption("Serif Classic", null, Typeface.SERIF, "Noto Serif", "NotoSerif-Regular.ttf"),
 
-                // Exact Asset Fonts from app/src/main/assets/fonts/
+                // Static Clean Fonts (100% FFmpeg & Android Compatible)
                 new FontOption("Abril Fatface", "fonts/AbrilFatface-Regular.ttf", Typeface.SERIF, "Abril Fatface", null),
                 new FontOption("Blaka Ink", "fonts/BlakaInk-Regular.ttf", Typeface.SANS_SERIF, "Blaka Ink", null),
                 new FontOption("Chau Philomene Regular", "fonts/ChauPhilomeneOne-Regular.ttf", Typeface.SANS_SERIF, "Chau Philomene One", null),
@@ -123,16 +123,15 @@ public class CaptionStyleOptions {
                 new FontOption("Montserrat Alt ExtraBold", "fonts/MontserratAlternates-ExtraBold.ttf", Typeface.SANS_SERIF, "Montserrat Alternates", null),
                 new FontOption("Montserrat Alt BlackItalic", "fonts/MontserratAlternates-BlackItalic.ttf", Typeface.SANS_SERIF, "Montserrat Alternates", null),
                 new FontOption("Petit Formal Script", "fonts/PetitFormalScript-Regular.ttf", Typeface.SERIF, "Petit Formal Script", null),
+                new FontOption("Playfair Display Regular", "fonts/PlayfairDisplay-Regular.ttf", Typeface.SERIF, "Playfair Display", null),
                 new FontOption("Playfair Display Bold", "fonts/PlayfairDisplay-Bold.ttf", Typeface.SERIF, "Playfair Display", null),
                 new FontOption("Playfair Display Black", "fonts/PlayfairDisplay-Black.ttf", Typeface.SERIF, "Playfair Display", null),
                 new FontOption("Playfair Display Italic", "fonts/PlayfairDisplay-Italic.ttf", Typeface.SERIF, "Playfair Display", null),
                 new FontOption("Playfair Display SemiBold Italic", "fonts/PlayfairDisplay-SemiBoldItalic.ttf", Typeface.SERIF, "Playfair Display", null),
                 new FontOption("Reddit Mono Bold", "fonts/RedditMono-Bold.ttf", Typeface.MONOSPACE, "Reddit Mono", null),
                 new FontOption("Reddit Mono Regular", "fonts/RedditMono-Regular.ttf", Typeface.MONOSPACE, "Reddit Mono", null),
-                new FontOption("Open Sans Variable", "fonts/OpenSans-VariableFont_wdth,wght.ttf", Typeface.SANS_SERIF, "Open Sans", null),
-                new FontOption("Playwrite IT", "fonts/PlaywriteIT-VariableFont_wght.ttf", Typeface.SERIF, "Playwrite IT", null),
-                new FontOption("Public Sans", "fonts/PublicSans-VariableFont_wght.ttf", Typeface.SANS_SERIF, "Public Sans", null),
-                new FontOption("REM Variable", "fonts/REM-VariableFont_wght.ttf", Typeface.SANS_SERIF, "REM", null)
+                new FontOption("Open Sans Regular", "fonts/OpenSans-Regular.ttf", Typeface.SANS_SERIF, "Open Sans", null),
+                new FontOption("Open Sans Italic", "fonts/OpenSans-Italic.ttf", Typeface.SANS_SERIF, "Open Sans", null)
         };
     }
 
@@ -181,14 +180,14 @@ public class CaptionStyleOptions {
     }
 
     public static Typeface resolveTypeface(Context context, FontOption option) {
-        if (option.assetFileName != null) {
+        if (option != null && option.assetFileName != null) {
             try {
                 return Typeface.createFromAsset(context.getAssets(), option.assetFileName);
             } catch (Exception e) {
-                return option.builtInTypeface;
+                return option.builtInTypeface != null ? option.builtInTypeface : Typeface.DEFAULT;
             }
         }
-        return option.builtInTypeface;
+        return (option != null && option.builtInTypeface != null) ? option.builtInTypeface : Typeface.DEFAULT;
     }
 
     public static String prepareExportFont(Context context, FontOption option, File targetDir) throws Exception {
@@ -196,17 +195,16 @@ public class CaptionStyleOptions {
             targetDir.mkdirs();
         }
 
-        if (option.assetFileName != null) {
+        if (option != null && option.assetFileName != null) {
             String baseName = option.assetFileName.substring(option.assetFileName.lastIndexOf('/') + 1);
             File dest = new File(targetDir, baseName);
             try (InputStream in = context.getAssets().open(option.assetFileName);
                  OutputStream out = new FileOutputStream(dest)) {
                 copyStream(in, out);
                 return option.exportFamilyName;
-            } catch (Exception e) {
-                // Fallback to Roboto if asset reading encounters any issue
+            } catch (Exception ignored) {
             }
-        } else if (option.systemFontFile != null) {
+        } else if (option != null && option.systemFontFile != null) {
             File systemFile = new File("/system/fonts/" + option.systemFontFile);
             if (systemFile.exists()) {
                 File dest = new File(targetDir, option.systemFontFile);
@@ -214,6 +212,7 @@ public class CaptionStyleOptions {
                      OutputStream out = new FileOutputStream(dest)) {
                     copyStream(in, out);
                     return option.exportFamilyName;
+                } catch (Exception ignored) {
                 }
             }
         }
@@ -224,6 +223,7 @@ public class CaptionStyleOptions {
             try (InputStream in = new java.io.FileInputStream(robotoSrc);
                  OutputStream out = new FileOutputStream(dest)) {
                 copyStream(in, out);
+            } catch (Exception ignored) {
             }
         }
         return "Roboto";
@@ -235,5 +235,6 @@ public class CaptionStyleOptions {
         while ((len = in.read(buffer)) != -1) {
             out.write(buffer, 0, len);
         }
+        out.flush();
     }
 }
