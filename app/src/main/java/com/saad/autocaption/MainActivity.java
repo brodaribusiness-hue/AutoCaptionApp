@@ -797,8 +797,7 @@ public class MainActivity extends AppCompatActivity {
         if (span != null) {
             spannable.setSpan(span, 0, word.length(), 0);
         }
-
-                boolean skipBold = config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
+        boolean skipBold = config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
         slot.setTypeface(config.typeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
         slot.setText(spannable);
     }
@@ -834,7 +833,6 @@ public class MainActivity extends AppCompatActivity {
         if (mediaPlayer != null && captionGroups != null && !captionGroups.isEmpty()) {
             try {
                 float currentTimeSec = mediaPlayer.getCurrentPosition() / 1000.0f;
-
                 int groupIndex = CaptionGrouper.groupIndexAt(captionGroups, currentTimeSec);
                 if (groupIndex != -1 && groupIndex < captionGroups.size()) {
                     CaptionGrouper.Group group = captionGroups.get(groupIndex);
@@ -844,6 +842,8 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception ignored) {}
         }
     }
+
+         
 
     private void startCaptionUpdates() {
         stopCaptionUpdates();
