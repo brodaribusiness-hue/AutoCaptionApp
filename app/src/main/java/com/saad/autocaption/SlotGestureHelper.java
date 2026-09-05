@@ -45,11 +45,11 @@ public class SlotGestureHelper implements View.OnTouchListener {
                     float newX = view.getTranslationX() + dx;
                     float newY = view.getTranslationY() + dy;
 
-                    // Calculate bounds relative to preview container so Up-Down movement is never blocked
+                    // Allow unrestricted movement inside preview frame
                     View container = findPreviewContainer(view);
                     if (container != null && container.getWidth() > 0 && container.getHeight() > 0) {
-                        float limitX = container.getWidth() * 0.48f;
-                        float limitY = container.getHeight() * 0.48f;
+                        float limitX = container.getWidth() * 0.95f;
+                        float limitY = container.getHeight() * 0.95f;
 
                         newX = Math.max(-limitX, Math.min(newX, limitX));
                         newY = Math.max(-limitY, Math.min(newY, limitY));
