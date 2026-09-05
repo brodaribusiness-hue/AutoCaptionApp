@@ -40,12 +40,10 @@ public class AssSubtitleBuilder {
                 + "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
                 + "Alignment, MarginL, MarginR, MarginV, Encoding\n");
 
-        // Base styles for default outlines
         sb.append(String.format(Locale.US,
                 "Style: Default,%s,%d,&HFFFFFF&,&HFFFFFF&,%s,%s,0,0,0,0,100,100,0,0,1,2,0,2,20,20,20,1\n",
                 configActive.fontOption.exportFamilyName, assFontSize, outlineColor, outlineColor));
 
-        // Independent Box styles for each slot
         sb.append(String.format(Locale.US,
                 "Style: BoxBefore,%s,%d,&HFFFFFF&,&HFFFFFF&,%s,%s,0,0,0,0,100,100,0,0,3,14,0,2,20,20,20,1\n",
                 configBefore.fontOption.exportFamilyName, assFontSize, outlineColor, beforeBoxAss));
@@ -65,10 +63,9 @@ public class AssSubtitleBuilder {
         float previewToVideoY = videoHeight / (float) Math.max(previewHeightPx, 1);
 
         int baseX = videoWidth / 2;
-        int baseY = videoHeight - Math.round(videoHeight * 0.06f);
+        int baseY = videoHeight - Math.round(videoHeight * 0.12f);
 
         boolean oneWordPunch = configActive.styleType == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
-
         List<CaptionGrouper.Group> groups = CaptionGrouper.group(captions, GROUP_SIZE);
 
         for (CaptionGrouper.Group group : groups) {
@@ -79,10 +76,9 @@ public class AssSubtitleBuilder {
                 String startTime = toAssTime(activeCap.startTime);
                 String endTime = toAssTime(activeCap.endTime);
 
-                // Slot 1 (Before)
                 if (!oneWordPunch && j - 1 >= 0) {
                     Caption beforeCap = words.get(j - 1);
-                    int beforeColor = (beforeCap.customColor != 0) ? beforeCap.customColor : configBefore.textColor;
+                    int beforeColor = beforeCap.resolveColor(configBefore.textColor);
                     String beforeColorAss = toAssColor(beforeColor);
                     String beforeTag = buildWordStyleTag(configBefore.styleType, beforeColorAss, configBefore.fontOption.exportFamilyName);
                     String beforeStyle = (configBefore.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT) ? "BoxBefore" : "Default";
@@ -92,8 +88,7 @@ public class AssSubtitleBuilder {
                             beforeTag, beforeStyle);
                 }
 
-                // Slot 2 (Active)
-                int activeColor = (activeCap.customColor != 0) ? activeCap.customColor : configActive.textColor;
+                int activeColor = activeCap.resolveColor(configActive.textColor);
                 String activeColorAss = toAssColor(activeColor);
                 String activeTag = buildWordStyleTag(configActive.styleType, activeColorAss, configActive.fontOption.exportFamilyName);
                 String activeStyle = (configActive.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT) ? "BoxActive" : "Default";
@@ -102,10 +97,9 @@ public class AssSubtitleBuilder {
                         activeSlot, baseX, baseY, previewToVideoX, previewToVideoY,
                         activeTag, activeStyle);
 
-                // Slot 3 (After)
                 if (!oneWordPunch && j + 1 < words.size()) {
                     Caption afterCap = words.get(j + 1);
-                    int afterColor = (afterCap.customColor != 0) ? afterCap.customColor : configAfter.textColor;
+                    int afterColor = afterCap.resolveColor(configAfter.textColor);
                     String afterColorAss = toAssColor(afterColor);
                     String afterTag = buildWordStyleTag(configAfter.styleType, afterColorAss, configAfter.fontOption.exportFamilyName);
                     String afterStyle = (configAfter.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT) ? "BoxAfter" : "Default";
