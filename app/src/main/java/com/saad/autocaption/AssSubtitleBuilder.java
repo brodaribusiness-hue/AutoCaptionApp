@@ -143,13 +143,12 @@ public class AssSubtitleBuilder {
             case MINIMAL_CLEAN:
                 return base + "\\c" + colorAss + "\\b1";
             case GLOW_POP:
-                return base + "\\c" + colorAss + "\\blur6";
+                // Intense bright neon halo tag in ASS
+                return base + "\\c" + colorAss + "\\bord4\\shad0\\blur8\\3c" + colorAss;
             case BOX_HIGHLIGHT:
                 return base + "\\c" + colorAss + "\\bord3\\shad4";
             case BOUNCE:
                 return base + "\\c" + colorAss + "\\t(0,250,\\fscx120\\fscy120)\\t(250,500,\\fscx100\\fscy100)";
-            case KARAOKE_FLOW:
-                return base + "\\c" + colorAss + "\\k50";
             case ONE_WORD_PUNCH:
                 return base + "\\c" + colorAss + "\\fscx160\\fscy160\\b1";
             default:
