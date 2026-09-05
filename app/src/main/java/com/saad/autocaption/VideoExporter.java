@@ -105,15 +105,14 @@ public class VideoExporter {
 
                 mainHandler.post(() -> callback.onProgress("Baking captions into video..."));
 
-                // Clean paths for FFmpeg filtergraph
                 String assPath = tempAss.getAbsolutePath().replace("\\", "/");
                 String fontsPath = fontsDir.getAbsolutePath().replace("\\", "/");
 
-                // Standard subtitle filter syntax
+                // Standard subtitle filter with compatible universal encoders
                 String vfFilter = "subtitles=filename='" + assPath + "':fontsdir='" + fontsPath + "'";
 
                 String cmd = String.format(
-                        "-y -i \"%s\" -vf \"%s\" -c:v libx264 -preset ultrafast -crf 22 -c:a aac -b:a 128k \"%s\"",
+                        "-y -i \"%s\" -vf \"%s\" -c:v mpeg4 -q:v 3 -c:a aac -b:a 128k \"%s\"",
                         tempSource.getAbsolutePath(),
                         vfFilter,
                         tempOutput.getAbsolutePath());
@@ -130,11 +129,10 @@ public class VideoExporter {
                     if (logs == null || logs.trim().isEmpty()) {
                         logs = session.getOutput();
                     }
-                    if (logs != null && logs.length() > 200) {
-                        logs = logs.substring(logs.length() - 200);
+                    if (logs != null && logs.length() > 250) {
+                        logs = logs.substring(logs.length() - 250);
                     }
-                    String failMsg = "FFmpeg failed (" + returnCode + "): " + logs;
-                    mainHandler.post(() -> callback.onError(failMsg));
+                    mainHandler.post(() -> callback.onError("Export failed: " + logs));
                 }
 
             } catch (Exception e) {
