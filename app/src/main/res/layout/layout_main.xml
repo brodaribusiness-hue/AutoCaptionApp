@@ -1,14 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fillViewport="true"
     android:clipChildren="false"
     android:clipToPadding="false"
-    android:background="@color/bg_primary"
-    tools:context=".MainActivity">
+    android:background="#121212">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -24,7 +22,7 @@
             android:text="Auto Caption"
             android:textSize="24sp"
             android:textStyle="bold"
-            android:textColor="@color/white"
+            android:textColor="#FFFFFF"
             android:gravity="center"
             android:layout_marginBottom="14dp" />
 
@@ -35,13 +33,12 @@
             android:layout_gravity="center_horizontal"
             android:clipChildren="false"
             android:clipToPadding="false"
-            android:background="@color/color_black">
+            android:background="#000000">
 
             <SurfaceView
                 android:id="@+id/videoSurface"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:contentDescription="@string/desc_video_surface" />
+                android:layout_height="match_parent" />
 
             <LinearLayout
                 android:id="@+id/captionLayer"
@@ -57,7 +54,7 @@
                     android:id="@+id/wordSlotBefore"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/caption_secondary"
+                    android:textColor="#CCCCCC"
                     android:textSize="22sp"
                     android:elevation="35dp"
                     android:padding="6dp" />
@@ -66,7 +63,7 @@
                     android:id="@+id/wordSlotActive"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/white"
+                    android:textColor="#FFFFFF"
                     android:textStyle="bold"
                     android:textSize="22sp"
                     android:elevation="35dp"
@@ -76,7 +73,7 @@
                     android:id="@+id/wordSlotAfter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="@color/caption_secondary"
+                    android:textColor="#CCCCCC"
                     android:textSize="22sp"
                     android:elevation="35dp"
                     android:padding="6dp" />
@@ -93,7 +90,7 @@
             android:orientation="horizontal"
             android:gravity="center_vertical"
             android:padding="8dp"
-            android:background="@color/control_bg"
+            android:background="#1E1E1E"
             android:layout_marginTop="6dp">
 
             <Button
@@ -102,8 +99,7 @@
                 android:layout_height="38dp"
                 android:text="Pause"
                 android:textSize="12sp"
-                android:textColor="@color/white"
-                android:contentDescription="@string/desc_play_pause" />
+                android:textColor="#FFFFFF" />
 
             <SeekBar
                 android:id="@+id/videoSeekBar"
@@ -118,7 +114,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="00:00"
-                android:textColor="@color/text_muted"
+                android:textColor="#AAAAAA"
                 android:textSize="12sp" />
         </LinearLayout>
 
@@ -127,7 +123,6 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Select Video"
-            android:contentDescription="@string/desc_select_video"
             android:layout_marginTop="12dp" />
 
         <LinearLayout
@@ -142,8 +137,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginEnd="4dp"
-                android:text="Generate Captions"
-                android:contentDescription="@string/desc_generate_captions" />
+                android:text="Generate Captions" />
 
             <Button
                 android:id="@+id/exportButton"
@@ -151,8 +145,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:layout_marginStart="4dp"
-                android:text="Export"
-                android:contentDescription="@string/desc_export" />
+                android:text="Export" />
 
         </LinearLayout>
 
@@ -161,7 +154,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Configure Word Slot:"
-            android:textColor="@color/white"
+            android:textColor="#FFFFFF"
             android:textSize="14sp"
             android:textStyle="bold"
             android:layout_marginTop="14dp" />
@@ -179,9 +172,8 @@
                 android:layout_weight="1"
                 android:text="1. Before"
                 android:textSize="11sp"
-                android:textColor="@color/caption_secondary"
-                android:background="@color/btn_bg_dark"
-                android:contentDescription="@string/desc_slot_before" />
+                android:textColor="#CCCCCC"
+                android:backgroundTint="#333333" />
 
             <Button
                 android:id="@+id/btnSlotActive"
@@ -192,9 +184,8 @@
                 android:layout_marginEnd="4dp"
                 android:text="2. Active"
                 android:textSize="11sp"
-                android:textColor="@color/black"
-                android:background="@color/accent_green"
-                android:contentDescription="@string/desc_slot_active" />
+                android:textColor="#000000"
+                android:backgroundTint="#00E676" />
 
             <Button
                 android:id="@+id/btnSlotAfter"
@@ -203,9 +194,8 @@
                 android:layout_weight="1"
                 android:text="3. After"
                 android:textSize="11sp"
-                android:textColor="@color/caption_secondary"
-                android:background="@color/btn_bg_dark"
-                android:contentDescription="@string/desc_slot_after" />
+                android:textColor="#CCCCCC"
+                android:backgroundTint="#333333" />
 
         </LinearLayout>
 
@@ -213,7 +203,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Font Style"
-            android:textColor="@color/caption_secondary"
+            android:textColor="#CCCCCC"
             android:textSize="13sp"
             android:layout_marginTop="12dp" />
 
@@ -221,15 +211,15 @@
             android:id="@+id/fontStyleSpinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@color/control_bg"
-            android:popupBackground="@color/control_bg"
+            android:background="#1E1E1E"
+            android:popupBackground="#1E1E1E"
             android:layout_marginTop="4dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Word Color"
-            android:textColor="@color/caption_secondary"
+            android:textColor="#CCCCCC"
             android:textSize="13sp"
             android:layout_marginTop="10dp" />
 
@@ -237,15 +227,15 @@
             android:id="@+id/captionColorSpinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@color/control_bg"
-            android:popupBackground="@color/control_bg"
+            android:background="#1E1E1E"
+            android:popupBackground="#1E1E1E"
             android:layout_marginTop="4dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Word Effect / Style"
-            android:textColor="@color/caption_secondary"
+            android:textColor="#CCCCCC"
             android:textSize="13sp"
             android:layout_marginTop="10dp" />
 
@@ -253,8 +243,8 @@
             android:id="@+id/captionStyleSpinner"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@color/control_bg"
-            android:popupBackground="@color/control_bg"
+            android:background="#1E1E1E"
+            android:popupBackground="#1E1E1E"
             android:layout_marginTop="4dp" />
 
         <Button
@@ -262,8 +252,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Box Background Color"
-            android:layout_marginTop="10dp"
-            android:contentDescription="@string/desc_box_color" />
+            android:layout_marginTop="10dp" />
 
         <TextView
             android:id="@+id/statusText"
@@ -271,7 +260,7 @@
             android:layout_height="wrap_content"
             android:text="Select a video to start"
             android:textSize="14sp"
-            android:textColor="@color/text_muted"
+            android:textColor="#AAAAAA"
             android:gravity="center"
             android:layout_marginTop="16dp" />
 
