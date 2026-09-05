@@ -59,7 +59,6 @@ public class MainActivity extends AppCompatActivity {
     private TextView timeText;
     private boolean isTrackingTouch = false;
 
-    // Slot Selection Controls
     private Button btnSlotBefore;
     private Button btnSlotActive;
     private Button btnSlotAfter;
@@ -67,7 +66,7 @@ public class MainActivity extends AppCompatActivity {
     private SlotStyleConfig configSlotBefore;
     private SlotStyleConfig configSlotActive;
     private SlotStyleConfig configSlotAfter;
-    private int currentSelectedSlotIndex = 1; // 0 = Before, 1 = Active, 2 = After
+    private int currentSelectedSlotIndex = 1;
     private boolean isUpdatingSpinnersProgrammatically = false;
 
     private Uri videoUri;
@@ -781,7 +780,7 @@ public class MainActivity extends AppCompatActivity {
                 span = new PopScaleSpan(effectiveColor, 1.4f);
                 break;
             case BOX_HIGHLIGHT:
-                span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 12f, 10f);
+                span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 14f);
                 break;
             case BOUNCE:
                 span = new BounceSpan(effectiveColor);
@@ -797,6 +796,7 @@ public class MainActivity extends AppCompatActivity {
         if (span != null) {
             spannable.setSpan(span, 0, word.length(), 0);
         }
+
         boolean skipBold = config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
         slot.setTypeface(config.typeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
         slot.setText(spannable);
@@ -818,7 +818,6 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else {
-            // Dynamic sliding triplet window centered on the actively spoken word
             Caption capBefore = (safeActive - 1 >= 0) ? group.words.get(safeActive - 1) : null;
             Caption capActive = group.words.get(safeActive);
             Caption capAfter = (safeActive + 1 < group.words.size()) ? group.words.get(safeActive + 1) : null;
