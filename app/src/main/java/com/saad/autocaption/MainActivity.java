@@ -48,7 +48,6 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout captionLayer;
     private Button generateCaptionsButton;
     private Button exportButton;
-    private Button boxColorButton;
     private Spinner fontStyleSpinner;
     private Spinner captionColorSpinner;
     private Spinner captionStyleSpinner;
@@ -82,7 +81,7 @@ public class MainActivity extends AppCompatActivity {
     private SlotGestureHelper activeSlotGesture;
     private SlotGestureHelper afterSlotGesture;
 
-    private final float selectedFontSizeSp = 22f;
+    private final float selectedFontSizeSp = 24f;
 
     private final AtomicInteger requestIdGenerator = new AtomicInteger(0);
     private volatile int currentRequestId = 0;
@@ -103,11 +102,11 @@ public class MainActivity extends AppCompatActivity {
         Typeface defaultTf = CaptionStyleOptions.resolveTypeface(this, defaultFont);
 
         configSlotBefore = new SlotStyleConfig(defaultFont, defaultTf, 0xFFCCCCCC,
-                CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN, 0xCC000000);
+                CaptionStyleOptions.CaptionStyleType.GLOW_POP, 0x00000000);
         configSlotActive = new SlotStyleConfig(defaultFont, defaultTf, 0xFFFFEA00,
-                CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT, 0xCC000000);
+                CaptionStyleOptions.CaptionStyleType.GLOW_POP, 0x00000000);
         configSlotAfter = new SlotStyleConfig(defaultFont, defaultTf, 0xFFCCCCCC,
-                CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN, 0xCC000000);
+                CaptionStyleOptions.CaptionStyleType.GLOW_POP, 0x00000000);
 
         pickVideoLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
@@ -136,7 +135,6 @@ public class MainActivity extends AppCompatActivity {
         Button selectVideoButton = findViewById(R.id.selectVideoButton);
         generateCaptionsButton = findViewById(R.id.generateCaptionsButton);
         exportButton = findViewById(R.id.exportButton);
-        boxColorButton = findViewById(R.id.boxColorButton);
         statusText = findViewById(R.id.statusText);
         fontStyleSpinner = findViewById(R.id.fontStyleSpinner);
         captionColorSpinner = findViewById(R.id.captionColorSpinner);
@@ -206,14 +204,6 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onStopTrackingTouch(SeekBar seekBar) { isTrackingTouch = false; }
         });
 
-        boxColorButton.setOnClickListener(v -> {
-            SlotStyleConfig current = getCurrentSlotConfig();
-            showBoxColorPickerDialog(current.boxColor, color -> {
-                current.boxColor = color;
-                triggerManualCaptionRedraw();
-            });
-        });
-
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
         surfaceHolder = videoSurface.getHolder();
@@ -258,6 +248,10 @@ public class MainActivity extends AppCompatActivity {
                 exportButton.setEnabled(false);
                 captions = null;
                 captionGroups = null;
+
+                // Reset coordinates to perfect center across all aspect ratios (1:1, 9:16, 16:9)
+                resetSlotPositionsToCenter();
+
                 wordSlotBefore.setText("");
                 wordSlotActive.setText("");
                 wordSlotAfter.setText("");
@@ -324,6 +318,23 @@ public class MainActivity extends AppCompatActivity {
                         }
                     });
         });
+    }
+
+    private void resetSlotPositionsToCenter() {
+        wordSlotBefore.setTranslationX(0f);
+        wordSlotBefore.setTranslationY(0f);
+        wordSlotBefore.setScaleX(1f);
+        wordSlotBefore.setScaleY(1f);
+
+        wordSlotActive.setTranslationX(0f);
+        wordSlotActive.setTranslationY(0f);
+        wordSlotActive.setScaleX(1f);
+        wordSlotActive.setScaleY(1f);
+
+        wordSlotAfter.setTranslationX(0f);
+        wordSlotAfter.setTranslationY(0f);
+        wordSlotAfter.setScaleX(1f);
+        wordSlotAfter.setScaleY(1f);
     }
 
     private SlotStyleConfig getCurrentSlotConfig() {
@@ -516,91 +527,6 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void showBoxColorPickerDialog(int initialColor, ColorPickCallback callback) {
-        LinearLayout container = new LinearLayout(this);
-        container.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) dpToPx(20);
-        container.setPadding(pad, pad, pad, pad);
-
-        final View previewBox = new View(this);
-        LinearLayout.LayoutParams previewParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, (int) dpToPx(60));
-        previewParams.bottomMargin = (int) dpToPx(16);
-        previewBox.setLayoutParams(previewParams);
-
-        float[] initHsv = new float[3];
-        Color.colorToHSV(initialColor, initHsv);
-        final int[] hue = { Math.round(initHsv[0]) };
-        final int[] value = { Math.round(initHsv[2] * 100) };
-        final int[] alpha = { Math.round(Color.alpha(initialColor) * 100 / 255f) };
-
-        Runnable updatePreview = () -> previewBox.setBackgroundColor(
-                Color.HSVToColor(Math.round(alpha[0] * 255 / 100f),
-                        new float[]{hue[0], 1f, value[0] / 100f}));
-        updatePreview.run();
-
-        TextView hueLabel = new TextView(this);
-        hueLabel.setText("Hue");
-        hueLabel.setTextColor(0xFFCCCCCC);
-        SeekBar hueSlider = new SeekBar(this);
-        hueSlider.setMax(360);
-        hueSlider.setProgress(hue[0]);
-
-        TextView valueLabel = new TextView(this);
-        valueLabel.setText("Brightness");
-        valueLabel.setTextColor(0xFFCCCCCC);
-        SeekBar valueSlider = new SeekBar(this);
-        valueSlider.setMax(100);
-        valueSlider.setProgress(value[0]);
-
-        TextView alphaLabel = new TextView(this);
-        alphaLabel.setText("Opacity");
-        alphaLabel.setTextColor(0xFFCCCCCC);
-        SeekBar alphaSlider = new SeekBar(this);
-        alphaSlider.setMax(100);
-        alphaSlider.setProgress(alpha[0]);
-
-        hueSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar sb, int p, boolean fromUser) {
-                hue[0] = p; updatePreview.run();
-            }
-            @Override public void onStartTrackingTouch(SeekBar sb) {}
-            @Override public void onStopTrackingTouch(SeekBar sb) {}
-        });
-        valueSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar sb, int p, boolean fromUser) {
-                value[0] = p; updatePreview.run();
-            }
-            @Override public void onStartTrackingTouch(SeekBar sb) {}
-            @Override public void onStopTrackingTouch(SeekBar sb) {}
-        });
-        alphaSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar sb, int p, boolean fromUser) {
-                alpha[0] = p; updatePreview.run();
-            }
-            @Override public void onStartTrackingTouch(SeekBar sb) {}
-            @Override public void onStopTrackingTouch(SeekBar sb) {}
-        });
-
-        container.addView(previewBox);
-        container.addView(hueLabel);
-        container.addView(hueSlider);
-        container.addView(valueLabel);
-        container.addView(valueSlider);
-        container.addView(alphaLabel);
-        container.addView(alphaSlider);
-
-        new AlertDialog.Builder(this)
-                .setTitle("Box Background Color")
-                .setView(container)
-                .setPositiveButton("Apply", (dialog, which) ->
-                        callback.onColorPicked(Color.HSVToColor(
-                                Math.round(alpha[0] * 255 / 100f),
-                                new float[]{hue[0], 1f, value[0] / 100f})))
-                .setNegativeButton("Cancel", (dialog, which) -> dialog.dismiss())
-                .show();
-    }
-
     private void handlePickedVideo(Intent data) {
         videoUri = data.getData();
         if (videoUri != null) {
@@ -614,6 +540,8 @@ public class MainActivity extends AppCompatActivity {
 
         captions = null;
         captionGroups = null;
+        resetSlotPositionsToCenter();
+
         wordSlotBefore.setText("");
         wordSlotActive.setText("");
         wordSlotAfter.setText("");
@@ -746,7 +674,7 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    private void applySlotStyle(TextView slot, Caption caption, SlotStyleConfig config, boolean isActive) {
+    private void applySlotStyle(TextView slot, Caption caption, SlotStyleConfig config, boolean isActiveSpeaking) {
         if (slot == null) return;
 
         if (caption == null || caption.word == null || caption.word.trim().isEmpty()) {
@@ -759,17 +687,24 @@ public class MainActivity extends AppCompatActivity {
 
         slot.setTypeface(config.typeface);
 
-        if (config.styleType == CaptionStyleOptions.CaptionStyleType.MINIMAL_CLEAN) {
+        // Inactive words render clean with outline
+        if (!isActiveSpeaking) {
             slot.setText(word);
             slot.setTextColor(effectiveColor);
-            slot.setTypeface(config.typeface, isActive ? Typeface.BOLD : Typeface.NORMAL);
+            slot.setTypeface(config.typeface, Typeface.NORMAL);
+            slot.setShadowLayer(3f, 1f, 1f, 0xFF000000);
             return;
         }
 
+        // Active Speaking Word Glowing logic
         android.text.SpannableString spannable = new android.text.SpannableString(word);
         Object span = null;
 
         switch (config.styleType) {
+            case GLOW_POP:
+                int neonGlow = (effectiveColor & 0x00FFFFFF) | 0xFF000000;
+                span = new GlowPopSpan(effectiveColor, neonGlow, 1.15f, 14f);
+                break;
             case HIGHLIGHT_POP:
                 span = new android.text.style.ForegroundColorSpan(effectiveColor);
                 break;
@@ -779,22 +714,13 @@ public class MainActivity extends AppCompatActivity {
             case ONE_WORD_PUNCH:
                 span = new PopScaleSpan(effectiveColor, 1.4f);
                 break;
-            case BOX_HIGHLIGHT:
-                // Only draw box when this slot is actively spoken
-                if (isActive) {
-                    span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 14f);
-                } else {
-                    span = new android.text.style.ForegroundColorSpan(effectiveColor);
-                }
-                break;
             case BOUNCE:
                 span = new BounceSpan(effectiveColor);
                 break;
-            case GLOW_POP:
-                int neonGlow = (effectiveColor & 0x00FFFFFF) | 0xDD000000;
-                span = new GlowPopSpan(effectiveColor, neonGlow, 1.15f, 10f);
-                break;
+            case CUMULATIVE_BUILD_UP:
+            case MINIMAL_CLEAN:
             default:
+                span = new android.text.style.ForegroundColorSpan(effectiveColor);
                 break;
         }
 
@@ -802,8 +728,7 @@ public class MainActivity extends AppCompatActivity {
             spannable.setSpan(span, 0, word.length(), 0);
         }
 
-        boolean skipBold = (config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT && isActive);
-        slot.setTypeface(config.typeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
+        slot.setTypeface(config.typeface, Typeface.BOLD);
         slot.setText(spannable);
     }
 
@@ -816,21 +741,41 @@ public class MainActivity extends AppCompatActivity {
         }
 
         boolean oneWordPunch = configSlotActive.styleType == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
+        boolean cumulativeBuildUp = configSlotActive.styleType == CaptionStyleOptions.CaptionStyleType.CUMULATIVE_BUILD_UP;
         int safeActive = (activeIndex >= 0 && activeIndex < group.words.size()) ? activeIndex : 0;
 
         if (oneWordPunch) {
             wordSlotBefore.setText("");
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
-        } else {
-            // Sequential 3-word flow: box moves smoothly to 1st, 2nd, and 3rd word
-            Caption capBefore = (group.words.size() > 0) ? group.words.get(0) : null;
-            Caption capActive = (group.words.size() > 1) ? group.words.get(1) : null;
-            Caption capAfter = (group.words.size() > 2) ? group.words.get(2) : null;
+        } else if (cumulativeBuildUp) {
+            // Typewriter / Cumulative Word Build-Up Flow
+            Caption cap1 = (group.words.size() > 0) ? group.words.get(0) : null;
+            Caption cap2 = (group.words.size() > 1) ? group.words.get(1) : null;
+            Caption cap3 = (group.words.size() > 2) ? group.words.get(2) : null;
 
-            applySlotStyle(wordSlotBefore, capBefore, configSlotBefore, safeActive == 0);
-            applySlotStyle(wordSlotActive, capActive, configSlotActive, safeActive == 1);
-            applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, safeActive == 2);
+            if (safeActive == 0) {
+                applySlotStyle(wordSlotBefore, cap1, configSlotBefore, true);
+                wordSlotActive.setText("");
+                wordSlotAfter.setText("");
+            } else if (safeActive == 1) {
+                applySlotStyle(wordSlotBefore, cap1, configSlotBefore, false);
+                applySlotStyle(wordSlotActive, cap2, configSlotActive, true);
+                wordSlotAfter.setText("");
+            } else {
+                applySlotStyle(wordSlotBefore, cap1, configSlotBefore, false);
+                applySlotStyle(wordSlotActive, cap2, configSlotActive, false);
+                applySlotStyle(wordSlotAfter, cap3, configSlotAfter, true);
+            }
+        } else {
+            // Sequential Glowing Flow across all other styles (1 -> 2 -> 3)
+            Caption cap1 = (group.words.size() > 0) ? group.words.get(0) : null;
+            Caption cap2 = (group.words.size() > 1) ? group.words.get(1) : null;
+            Caption cap3 = (group.words.size() > 2) ? group.words.get(2) : null;
+
+            applySlotStyle(wordSlotBefore, cap1, configSlotBefore, safeActive == 0);
+            applySlotStyle(wordSlotActive, cap2, configSlotActive, safeActive == 1);
+            applySlotStyle(wordSlotAfter, cap3, configSlotAfter, safeActive == 2);
         }
     }
 
