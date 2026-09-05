@@ -771,9 +771,6 @@ public class MainActivity extends AppCompatActivity {
             case GREEN_EMPHASIS:
                 span = new android.text.style.ForegroundColorSpan(0xFF00E676);
                 break;
-            case KARAOKE_FLOW:
-                span = new KaraokeFillSpan(0xFFFFFFFF, effectiveColor, 8f);
-                break;
             case ONE_WORD_PUNCH:
                 span = new PopScaleSpan(effectiveColor, 1.35f);
                 break;
@@ -784,8 +781,8 @@ public class MainActivity extends AppCompatActivity {
                 span = new BounceSpan(effectiveColor);
                 break;
             case GLOW_POP:
-                int glow = (effectiveColor & 0x00FFFFFF) | 0x80000000;
-                span = new GlowPopSpan(effectiveColor, glow, 1.15f, 5f);
+                int neonGlow = (effectiveColor & 0x00FFFFFF) | 0xDD000000;
+                span = new GlowPopSpan(effectiveColor, neonGlow, 1.15f, 10f);
                 break;
             default:
                 break;
@@ -795,8 +792,7 @@ public class MainActivity extends AppCompatActivity {
             spannable.setSpan(span, 0, word.length(), 0);
         }
 
-        boolean skipBold = config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT
-                || config.styleType == CaptionStyleOptions.CaptionStyleType.KARAOKE_FLOW;
+        boolean skipBold = config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
         slot.setTypeface(config.typeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
         slot.setText(spannable);
     }
