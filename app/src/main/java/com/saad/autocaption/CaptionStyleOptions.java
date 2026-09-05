@@ -13,10 +13,10 @@ public class CaptionStyleOptions {
 
     public static class FontOption {
         public final String label;
-        public final String assetFileName;   // Path under assets/
+        public final String assetFileName;
         public final Typeface builtInTypeface;
-        public final String exportFamilyName; // Clean font name for .ass subtitle
-        public final String systemFontFile;   // Filename under /system/fonts
+        public final String exportFamilyName;
+        public final String systemFontFile;
 
         FontOption(String label, String assetFileName, Typeface builtInTypeface, String exportFamilyName, String systemFontFile) {
             this.label = label;
@@ -77,10 +77,10 @@ public class CaptionStyleOptions {
         }
     }
 
+    // Karaoke flow removed completely
     public enum CaptionStyleType {
         HIGHLIGHT_POP,
         GREEN_EMPHASIS,
-        KARAOKE_FLOW,
         ONE_WORD_PUNCH,
         BOX_HIGHLIGHT,
         BOUNCE,
@@ -105,11 +105,8 @@ public class CaptionStyleOptions {
 
     public static FontOption[] getFontOptions() {
         return new FontOption[]{
-                // System Presets
                 new FontOption("Modern (Roboto)", null, Typeface.SANS_SERIF, "Roboto", "Roboto-Regular.ttf"),
                 new FontOption("Serif Classic", null, Typeface.SERIF, "Noto Serif", "NotoSerif-Regular.ttf"),
-
-                // Static Clean Fonts (100% FFmpeg & Android Compatible)
                 new FontOption("Abril Fatface", "fonts/AbrilFatface-Regular.ttf", Typeface.SERIF, "Abril Fatface", null),
                 new FontOption("Blaka Ink", "fonts/BlakaInk-Regular.ttf", Typeface.SANS_SERIF, "Blaka Ink", null),
                 new FontOption("Chau Philomene Regular", "fonts/ChauPhilomeneOne-Regular.ttf", Typeface.SANS_SERIF, "Chau Philomene One", null),
@@ -170,11 +167,10 @@ public class CaptionStyleOptions {
         return new StyleOption[]{
                 new StyleOption("Highlight Pop", CaptionStyleType.HIGHLIGHT_POP),
                 new StyleOption("Green Emphasis", CaptionStyleType.GREEN_EMPHASIS),
-                new StyleOption("Karaoke Flow", CaptionStyleType.KARAOKE_FLOW),
                 new StyleOption("One Word Punch", CaptionStyleType.ONE_WORD_PUNCH),
                 new StyleOption("Box Highlight", CaptionStyleType.BOX_HIGHLIGHT),
                 new StyleOption("Bounce Caption", CaptionStyleType.BOUNCE),
-                new StyleOption("Glow Pop", CaptionStyleType.GLOW_POP),
+                new StyleOption("Glow Pop (Neon)", CaptionStyleType.GLOW_POP),
                 new StyleOption("Minimal Clean", CaptionStyleType.MINIMAL_CLEAN),
         };
     }
@@ -202,8 +198,7 @@ public class CaptionStyleOptions {
                  OutputStream out = new FileOutputStream(dest)) {
                 copyStream(in, out);
                 return option.exportFamilyName;
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) {}
         } else if (option != null && option.systemFontFile != null) {
             File systemFile = new File("/system/fonts/" + option.systemFontFile);
             if (systemFile.exists()) {
@@ -212,8 +207,7 @@ public class CaptionStyleOptions {
                      OutputStream out = new FileOutputStream(dest)) {
                     copyStream(in, out);
                     return option.exportFamilyName;
-                } catch (Exception ignored) {
-                }
+                } catch (Exception ignored) {}
             }
         }
 
@@ -223,8 +217,7 @@ public class CaptionStyleOptions {
             try (InputStream in = new java.io.FileInputStream(robotoSrc);
                  OutputStream out = new FileOutputStream(dest)) {
                 copyStream(in, out);
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) {}
         }
         return "Roboto";
     }
