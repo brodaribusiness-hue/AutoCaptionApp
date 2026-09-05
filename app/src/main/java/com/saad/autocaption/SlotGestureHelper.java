@@ -19,8 +19,9 @@ public class SlotGestureHelper implements View.OnTouchListener {
                 new ScaleGestureDetector.SimpleOnScaleGestureListener() {
                     @Override
                     public boolean onScale(ScaleGestureDetector detector) {
-                        currentScale *= detector.getScaleFactor();
-                        currentScale = Math.max(0.4f, Math.min(currentScale, 4.0f));
+                        float scaleFactor = detector.getScaleFactor();
+                        currentScale *= scaleFactor;
+                        currentScale = Math.max(0.5f, Math.min(currentScale, 3.5f));
                         return true;
                     }
                 });
@@ -42,21 +43,8 @@ public class SlotGestureHelper implements View.OnTouchListener {
                     float dx = event.getRawX() - lastTouchX;
                     float dy = event.getRawY() - lastTouchY;
 
-                    float newX = view.getTranslationX() + dx;
-                    float newY = view.getTranslationY() + dy;
-
-                    // Allow unrestricted movement inside preview frame
-                    View container = findPreviewContainer(view);
-                    if (container != null && container.getWidth() > 0 && container.getHeight() > 0) {
-                        float limitX = container.getWidth() * 0.95f;
-                        float limitY = container.getHeight() * 0.95f;
-
-                        newX = Math.max(-limitX, Math.min(newX, limitX));
-                        newY = Math.max(-limitY, Math.min(newY, limitY));
-                    }
-
-                    view.setTranslationX(newX);
-                    view.setTranslationY(newY);
+                    view.setTranslationX(view.getTranslationX() + dx);
+                    view.setTranslationY(view.getTranslationY() + dy);
 
                     lastTouchX = event.getRawX();
                     lastTouchY = event.getRawY();
@@ -69,9 +57,6 @@ public class SlotGestureHelper implements View.OnTouchListener {
             case MotionEvent.ACTION_CANCEL:
                 requestParentDisallowIntercept(view, false);
                 break;
-
-            default:
-                break;
         }
 
         view.setScaleX(currentScale);
@@ -79,21 +64,10 @@ public class SlotGestureHelper implements View.OnTouchListener {
         return true;
     }
 
-    private View findPreviewContainer(View view) {
-        ViewParent parent = view.getParent();
-        while (parent instanceof View) {
-            View parentView = (View) parent;
-            if (parentView instanceof AspectRatioFrameLayout) {
-                return parentView;
-            }
-            parent = parent.getParent();
-        }
-        return (view.getParent() instanceof View) ? (View) view.getParent() : null;
-    }
-
     private void requestParentDisallowIntercept(View view, boolean disallow) {
-        if (view.getParent() != null) {
-            view.getParent().requestDisallowInterceptTouchEvent(disallow);
+        ViewParent parent = view.getParent();
+        if (parent != null) {
+            parent.requestDisallowInterceptTouchEvent(disallow);
         }
     }
 
