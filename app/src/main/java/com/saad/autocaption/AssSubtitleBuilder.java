@@ -143,7 +143,6 @@ public class AssSubtitleBuilder {
             case MINIMAL_CLEAN:
                 return base + "\\c" + colorAss + "\\b1";
             case GLOW_POP:
-                // Intense bright neon halo tag in ASS
                 return base + "\\c" + colorAss + "\\bord4\\shad0\\blur8\\3c" + colorAss;
             case BOX_HIGHLIGHT:
                 return base + "\\c" + colorAss + "\\bord3\\shad4";
