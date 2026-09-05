@@ -20,7 +20,6 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.Spinner;
@@ -46,7 +45,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView wordSlotBefore;
     private TextView wordSlotActive;
     private TextView wordSlotAfter;
-    private FrameLayout captionLayer;
+    private LinearLayout captionLayer;
     private Button generateCaptionsButton;
     private Button exportButton;
     private Button boxColorButton;
@@ -173,14 +172,6 @@ public class MainActivity extends AppCompatActivity {
         afterSlotGesture = new SlotGestureHelper(this);
         wordSlotAfter.setOnTouchListener(afterSlotGesture);
 
-        // Bring captions to the foreground above SurfaceView
-        if (captionLayer != null) {
-            captionLayer.bringToFront();
-        }
-        wordSlotBefore.bringToFront();
-        wordSlotActive.bringToFront();
-        wordSlotAfter.bringToFront();
-
         generateCaptionsButton.setEnabled(false);
         exportButton.setEnabled(false);
 
@@ -226,10 +217,15 @@ public class MainActivity extends AppCompatActivity {
 
         captionUpdateHandler = new Handler(Looper.getMainLooper());
 
-        // Setup SurfaceView layer: Standard layer with alpha transparency so captions stay visible
+        // CRITICAL FIX: Explicitly place SurfaceView behind caption views
         surfaceHolder = videoSurface.getHolder();
-        surfaceHolder.setFormat(PixelFormat.TRANSLUCENT);
+        surfaceHolder.setFormat(PixelFormat.TRANSPARENT);
         videoSurface.setZOrderOnTop(false);
+        videoSurface.setZOrderMediaOverlay(false);
+
+        // Force bring captions layer to the absolute front
+        captionLayer.bringToFront();
+        captionLayer.invalidate();
 
         surfaceHolder.addCallback(new SurfaceHolder.Callback() {
             @Override
@@ -732,6 +728,7 @@ public class MainActivity extends AppCompatActivity {
                                     playPauseButton.setText("Pause");
                                 }
 
+                                captionLayer.bringToFront();
                                 startCaptionUpdates();
 
                             } catch (Throwable t) {
@@ -756,7 +753,7 @@ public class MainActivity extends AppCompatActivity {
     private void applySlotStyle(TextView slot, Caption caption, SlotStyleConfig config, boolean isActive) {
         if (slot == null) return;
 
-        if (caption == null || caption.word == null || caption.word.isEmpty()) {
+        if (caption == null || caption.word == null || caption.word.trim().isEmpty()) {
             slot.setText("");
             return;
         }
@@ -787,10 +784,10 @@ public class MainActivity extends AppCompatActivity {
                 span = new KaraokeFillSpan(0xFFFFFFFF, effectiveColor, 8f);
                 break;
             case ONE_WORD_PUNCH:
-                span = new PopScaleSpan(effectiveColor, 1.6f);
+                span = new PopScaleSpan(effectiveColor, 1.4f);
                 break;
             case BOX_HIGHLIGHT:
-                span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 14f, 14f);
+                span = new BackgroundBoxSpan(effectiveColor, config.boxColor, 12f, 10f);
                 break;
             case BOUNCE:
                 span = new BounceSpan(effectiveColor);
@@ -811,30 +808,6 @@ public class MainActivity extends AppCompatActivity {
                 || config.styleType == CaptionStyleOptions.CaptionStyleType.KARAOKE_FLOW;
         slot.setTypeface(config.typeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
         slot.setText(spannable);
-    }
-
-    private float measureSlotWidth(TextView slot) {
-        CharSequence text = slot.getText();
-        if (text == null || text.length() == 0) return 0f;
-        return slot.getPaint().measureText(text, 0, text.length())
-                + slot.getPaddingLeft() + slot.getPaddingRight();
-    }
-
-    private void autoSpaceSlots() {
-        float gap = dpToPx(8);
-        float activeWidth = measureSlotWidth(wordSlotActive);
-
-        if (!activeSlotGesture.isPositionDragged()) {
-            wordSlotActive.setTranslationX(0f);
-        }
-        if (!beforeSlotGesture.isPositionDragged()) {
-            float beforeWidth = measureSlotWidth(wordSlotBefore);
-            wordSlotBefore.setTranslationX(-(activeWidth / 2f + gap + beforeWidth / 2f));
-        }
-        if (!afterSlotGesture.isPositionDragged()) {
-            float afterWidth = measureSlotWidth(wordSlotAfter);
-            wordSlotAfter.setTranslationX(activeWidth / 2f + gap + afterWidth / 2f);
-        }
     }
 
     private void renderGroupSafe(CaptionGrouper.Group group, int activeIndex) {
@@ -861,7 +834,6 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, capActive, configSlotActive, safeActive == 1 || group.words.size() == 1);
             applySlotStyle(wordSlotAfter, capAfter, configSlotAfter, safeActive == 2);
         }
-        autoSpaceSlots();
     }
 
     private void triggerManualCaptionRedraw() {
@@ -943,6 +915,7 @@ public class MainActivity extends AppCompatActivity {
                 playPauseButton.setText("Pause");
                 mp.setLooping(true);
                 mp.start();
+                captionLayer.bringToFront();
             });
 
             mediaPlayer.setOnErrorListener((mp, what, extra) -> {
