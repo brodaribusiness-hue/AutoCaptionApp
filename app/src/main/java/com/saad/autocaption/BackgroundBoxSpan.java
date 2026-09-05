@@ -6,7 +6,7 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.text.style.ReplacementSpan;
 
-/** Dynamic highlight box that automatically expands and scales with font size and metrics. */
+/** Background highlight box dynamically scaled to text size and font metrics. */
 public class BackgroundBoxSpan extends ReplacementSpan {
     private final int textColor;
     private final int boxColor;
@@ -48,7 +48,8 @@ public class BackgroundBoxSpan extends ReplacementSpan {
     }
 
     @Override
-    public void draw(Canvas canvas, CharSequence text, int start, int end, float x, int top, int y, int bottom, Paint paint) {
+    public void draw(Canvas canvas, CharSequence text, int start, int end,
+                      float x, int top, int y, int bottom, Paint paint) {
         float textWidth = paint.measureText(text, start, end);
         float hPad = getHorizontalPadding(paint);
         float vPad = getVerticalPadding(paint);
@@ -64,14 +65,22 @@ public class BackgroundBoxSpan extends ReplacementSpan {
         int originalColor = paint.getColor();
         Paint.Style originalStyle = paint.getStyle();
 
-        // 1. Draw rounded box with exact font proportions
+        // 1. Draw rounded box with proportional metrics
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(boxColor);
         canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint);
 
-        // 2. Draw active text centered inside the box
+        // 2. Text shadow for contrast
+        float textX = x + hPad;
+        float[] hsv = new float[3];
+        Color.colorToHSV(textColor, hsv);
+        int depthColor = Color.HSVToColor(160, new float[]{hsv[0], hsv[1], Math.max(hsv[2] * 0.30f, 0.05f)});
+        paint.setColor(depthColor);
+        canvas.drawText(text, start, end, textX + 1.5f, y + 1.5f, paint);
+
+        // 3. Crisp Foreground Text
         paint.setColor(textColor);
-        canvas.drawText(text, start, end, x + hPad, y, paint);
+        canvas.drawText(text, start, end, textX, y, paint);
 
         paint.setColor(originalColor);
         paint.setStyle(originalStyle);
