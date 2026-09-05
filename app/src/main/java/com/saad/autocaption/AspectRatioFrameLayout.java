@@ -18,9 +18,11 @@ public class AspectRatioFrameLayout extends FrameLayout {
     }
 
     public void setAspectRatio(float width, float height) {
-        ratioWidth = width;
-        ratioHeight = height;
-        requestLayout();
+        if (width > 0 && height > 0) {
+            this.ratioWidth = width;
+            this.ratioHeight = height;
+            requestLayout();
+        }
     }
 
     @Override
@@ -33,9 +35,7 @@ public class AspectRatioFrameLayout extends FrameLayout {
         }
 
         int calculatedHeight = Math.round(widthSize * (ratioHeight / ratioWidth));
-
-        int newHeightSpec = MeasureSpec.makeMeasureSpec(
-                calculatedHeight, MeasureSpec.EXACTLY);
+        int newHeightSpec = MeasureSpec.makeMeasureSpec(calculatedHeight, MeasureSpec.EXACTLY);
 
         super.onMeasure(widthMeasureSpec, newHeightSpec);
     }
