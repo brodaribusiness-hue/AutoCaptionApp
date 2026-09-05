@@ -4,8 +4,6 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.text.style.ReplacementSpan;
 
-/** Draws the active word enlarged relative to the rest of the caption
- * line, for a "pop"/scale emphasis effect. */
 public class PopScaleSpan extends ReplacementSpan {
 
     private final int textColor;
@@ -17,8 +15,7 @@ public class PopScaleSpan extends ReplacementSpan {
     }
 
     @Override
-    public int getSize(Paint paint, CharSequence text, int start, int end,
-                        Paint.FontMetricsInt fm) {
+    public int getSize(Paint paint, CharSequence text, int start, int end, Paint.FontMetricsInt fm) {
         float originalSize = paint.getTextSize();
         paint.setTextSize(originalSize * scale);
         int width = Math.round(paint.measureText(text, start, end));
