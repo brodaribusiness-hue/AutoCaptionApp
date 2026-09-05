@@ -6,38 +6,30 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.text.style.ReplacementSpan;
 
-/** Background highlight box dynamically scaled to text size and font metrics. */
+/** Dynamic highlight box that automatically expands and scales with font size and metrics. */
 public class BackgroundBoxSpan extends ReplacementSpan {
     private final int textColor;
     private final int boxColor;
     private final float cornerRadius;
-    private final float customPadding;
-    private final boolean useDynamicPadding;
 
-    // 3-Argument Constructor (Auto dynamic padding based on text size)
     public BackgroundBoxSpan(int textColor, int boxColor, float cornerRadiusPx) {
         this.textColor = textColor;
         this.boxColor = boxColor;
         this.cornerRadius = cornerRadiusPx;
-        this.customPadding = 0f;
-        this.useDynamicPadding = true;
     }
 
-    // 4-Argument Constructor (Compatibility constructor for explicit padding & radius)
     public BackgroundBoxSpan(int textColor, int boxColor, float paddingPx, float cornerRadiusPx) {
         this.textColor = textColor;
         this.boxColor = boxColor;
-        this.customPadding = paddingPx;
         this.cornerRadius = cornerRadiusPx;
-        this.useDynamicPadding = false;
     }
 
     private float getHorizontalPadding(Paint paint) {
-        return useDynamicPadding ? (paint.getTextSize() * 0.30f) : customPadding;
+        return paint.getTextSize() * 0.32f;
     }
 
     private float getVerticalPadding(Paint paint) {
-        return useDynamicPadding ? (paint.getTextSize() * 0.18f) : (customPadding * 0.55f);
+        return paint.getTextSize() * 0.22f;
     }
 
     @Override
@@ -62,34 +54,24 @@ public class BackgroundBoxSpan extends ReplacementSpan {
         float vPad = getVerticalPadding(paint);
 
         Paint.FontMetrics fm = paint.getFontMetrics();
-        float textCenterY = y + (fm.ascent + fm.descent) / 2f;
-        float boxHeight = (fm.descent - fm.ascent) + (vPad * 2f);
+        float boxTop = y + fm.ascent - vPad;
+        float boxBottom = y + fm.descent + vPad;
+        float boxLeft = x;
+        float boxRight = x + textWidth + (hPad * 2f);
 
-        RectF rect = new RectF(
-                x,
-                textCenterY - (boxHeight / 2f),
-                x + textWidth + (hPad * 2f),
-                textCenterY + (boxHeight / 2f)
-        );
+        RectF rect = new RectF(boxLeft, boxTop, boxRight, boxBottom);
 
         int originalColor = paint.getColor();
         Paint.Style originalStyle = paint.getStyle();
 
+        // 1. Draw rounded box with exact font proportions
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(boxColor);
         canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint);
 
-        float textX = x + hPad;
-        float textY = y;
-
-        float[] hsv = new float[3];
-        Color.colorToHSV(textColor, hsv);
-        int depthColor = Color.HSVToColor(160, new float[]{hsv[0], hsv[1], Math.max(hsv[2] * 0.30f, 0.05f)});
-        paint.setColor(depthColor);
-        canvas.drawText(text, start, end, textX + 1.5f, textY + 1.5f, paint);
-
+        // 2. Draw active text centered inside the box
         paint.setColor(textColor);
-        canvas.drawText(text, start, end, textX, textY, paint);
+        canvas.drawText(text, start, end, x + hPad, y, paint);
 
         paint.setColor(originalColor);
         paint.setStyle(originalStyle);
