@@ -800,10 +800,10 @@ public class MainActivity extends AppCompatActivity {
 
         boolean skipBold = config.styleType == CaptionStyleOptions.CaptionStyleType.BOX_HIGHLIGHT;
         slot.setTypeface(config.typeface, skipBold ? Typeface.NORMAL : Typeface.BOLD);
-        slot.setText(spannable);
+                slot.setText(spannable);
     }
 
-        private void renderGroupSafe(CaptionGrouper.Group group, int activeIndex) {
+    private void renderGroupSafe(CaptionGrouper.Group group, int activeIndex) {
         if (group == null || group.words == null || group.words.isEmpty()) {
             wordSlotBefore.setText("");
             wordSlotActive.setText("");
@@ -819,7 +819,7 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else {
-            // Dynamic sliding window: active word center slot mein highlight hoga[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)
+            // Sliding window: Active word center slot mein highlight hota hai[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span)
             Caption capBefore = (safeActive - 1 >= 0) ? group.words.get(safeActive - 1) : null;
             Caption capActive = group.words.get(safeActive);
             Caption capAfter = (safeActive + 1 < group.words.size()) ? group.words.get(safeActive + 1) : null;
@@ -830,8 +830,8 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-
     private void triggerManualCaptionRedraw() {
+
         if (mediaPlayer != null && captionGroups != null && !captionGroups.isEmpty()) {
             try {
                 float currentTimeSec = mediaPlayer.getCurrentPosition() / 1000.0f;
