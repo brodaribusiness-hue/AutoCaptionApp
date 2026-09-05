@@ -23,7 +23,7 @@ public class BackgroundBoxSpan extends ReplacementSpan {
         this.useDynamicPadding = true;
     }
 
-    // 4-Argument Constructor (Explicit padding & corner radius)
+    // 4-Argument Constructor (Compatibility constructor for explicit padding & radius)
     public BackgroundBoxSpan(int textColor, int boxColor, float paddingPx, float cornerRadiusPx) {
         this.textColor = textColor;
         this.boxColor = boxColor;
@@ -75,23 +75,19 @@ public class BackgroundBoxSpan extends ReplacementSpan {
         int originalColor = paint.getColor();
         Paint.Style originalStyle = paint.getStyle();
 
-        // 1. Rounded highlight background box
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(boxColor);
         canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint);
 
-        // 2. Centered Text placement
         float textX = x + hPad;
         float textY = y;
 
-        // Subtle drop shadow for depth
         float[] hsv = new float[3];
         Color.colorToHSV(textColor, hsv);
         int depthColor = Color.HSVToColor(160, new float[]{hsv[0], hsv[1], Math.max(hsv[2] * 0.30f, 0.05f)});
         paint.setColor(depthColor);
         canvas.drawText(text, start, end, textX + 1.5f, textY + 1.5f, paint);
 
-        // Foreground text
         paint.setColor(textColor);
         canvas.drawText(text, start, end, textX, textY, paint);
 
