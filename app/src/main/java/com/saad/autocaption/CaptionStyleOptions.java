@@ -2,6 +2,8 @@ package com.saad.autocaption;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.util.Log;
+import android.view.Gravity;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -10,6 +12,8 @@ import java.io.OutputStream;
 
 public class CaptionStyleOptions {
 
+    private static final String TAG = "CaptionStyleOptions";
+
     public static class FontOption {
         public final String label;
         public final String assetFileName;
@@ -17,7 +21,7 @@ public class CaptionStyleOptions {
         public final String exportFamilyName;
         public final String systemFontFile;
 
-        FontOption(String label, String assetFileName, Typeface builtInTypeface, String exportFamilyName, String systemFontFile) {
+        public FontOption(String label, String assetFileName, Typeface builtInTypeface, String exportFamilyName, String systemFontFile) {
             this.label = label;
             this.assetFileName = assetFileName;
             this.builtInTypeface = builtInTypeface;
@@ -35,9 +39,39 @@ public class CaptionStyleOptions {
         public final String label;
         public final int color;
 
-        ColorOption(String label, int color) {
+        public ColorOption(String label, int color) {
             this.label = label;
             this.color = color;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    public static class FontSizeOption {
+        public final String label;
+        public final float sizeSp;
+
+        public FontSizeOption(String label, float sizeSp) {
+            this.label = label;
+            this.sizeSp = sizeSp;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    public static class PositionOption {
+        public final String label;
+        public final int gravity;
+
+        public PositionOption(String label, int gravity) {
+            this.label = label;
+            this.gravity = gravity;
         }
 
         @Override
@@ -51,6 +85,7 @@ public class CaptionStyleOptions {
         HIGHLIGHT_POP,
         GREEN_EMPHASIS,
         CUMULATIVE_BUILD_UP,
+        BOX_HIGHLIGHT,
         BOUNCE,
         ONE_WORD_PUNCH,
         MINIMAL_CLEAN
@@ -60,7 +95,7 @@ public class CaptionStyleOptions {
         public final String label;
         public final CaptionStyleType type;
 
-        StyleOption(String label, CaptionStyleType type) {
+        public StyleOption(String label, CaptionStyleType type) {
             this.label = label;
             this.type = type;
         }
@@ -113,12 +148,31 @@ public class CaptionStyleOptions {
         };
     }
 
+    public static FontSizeOption[] getFontSizeOptions() {
+        return new FontSizeOption[]{
+                new FontSizeOption("Small", 18f),
+                new FontSizeOption("Medium", 22f),
+                new FontSizeOption("Large", 26f),
+                new FontSizeOption("X-Large", 30f),
+                new FontSizeOption("Huge", 36f),
+        };
+    }
+
+    public static PositionOption[] getPositionOptions() {
+        return new PositionOption[]{
+                new PositionOption("Top", Gravity.TOP),
+                new PositionOption("Middle", Gravity.CENTER_VERTICAL),
+                new PositionOption("Bottom", Gravity.BOTTOM),
+        };
+    }
+
     public static StyleOption[] getStyleOptions() {
         return new StyleOption[]{
                 new StyleOption("Glow Pop (Neon)", CaptionStyleType.GLOW_POP),
                 new StyleOption("Word Build-Up (Typewriter)", CaptionStyleType.CUMULATIVE_BUILD_UP),
                 new StyleOption("Highlight Pop", CaptionStyleType.HIGHLIGHT_POP),
                 new StyleOption("Green Emphasis", CaptionStyleType.GREEN_EMPHASIS),
+                new StyleOption("Box Highlight", CaptionStyleType.BOX_HIGHLIGHT),
                 new StyleOption("Bounce Caption", CaptionStyleType.BOUNCE),
                 new StyleOption("One Word Punch", CaptionStyleType.ONE_WORD_PUNCH),
                 new StyleOption("Minimal Clean", CaptionStyleType.MINIMAL_CLEAN),
@@ -130,6 +184,7 @@ public class CaptionStyleOptions {
             try {
                 return Typeface.createFromAsset(context.getAssets(), option.assetFileName);
             } catch (Exception e) {
+                Log.w(TAG, "Failed to load asset font: " + option.assetFileName, e);
                 return option.builtInTypeface != null ? option.builtInTypeface : Typeface.DEFAULT;
             }
         }
@@ -148,7 +203,9 @@ public class CaptionStyleOptions {
                  OutputStream out = new FileOutputStream(dest)) {
                 copyStream(in, out);
                 return option.exportFamilyName;
-            } catch (Exception ignored) {}
+            } catch (Exception e) {
+                Log.e(TAG, "Could not copy asset font: " + option.assetFileName, e);
+            }
         } else if (option != null && option.systemFontFile != null) {
             File systemFile = new File("/system/fonts/" + option.systemFontFile);
             if (systemFile.exists()) {
@@ -157,7 +214,9 @@ public class CaptionStyleOptions {
                      OutputStream out = new FileOutputStream(dest)) {
                     copyStream(in, out);
                     return option.exportFamilyName;
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    Log.e(TAG, "Could not copy system font: " + option.systemFontFile, e);
+                }
             }
         }
 
