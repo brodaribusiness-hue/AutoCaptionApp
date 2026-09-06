@@ -9,18 +9,22 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
+import android.util.Log;
 
 import com.arthenica.ffmpegkit.FFmpegKit;
 import com.arthenica.ffmpegkit.FFmpegSession;
 import com.arthenica.ffmpegkit.ReturnCode;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
 
 public class VideoExporter {
+
+    private static final String TAG = "VideoExporter";
 
     public interface ExportCallback {
         void onProgress(String message);
@@ -52,9 +56,13 @@ public class VideoExporter {
             File tempOutput = null;
 
             try {
+                // 1. Copy source video to private cache
                 tempSource = new File(context.getCacheDir(), "export_input_" + System.currentTimeMillis() + ".mp4");
                 try (InputStream in = context.getContentResolver().openInputStream(sourceVideoUri);
                      OutputStream out = new FileOutputStream(tempSource)) {
+                    if (in == null) {
+                        throw new Exception("Unable to open source video stream");
+                    }
                     byte[] buf = new byte[65536];
                     int len;
                     while ((len = in.read(buf)) > 0) {
@@ -63,17 +71,21 @@ public class VideoExporter {
                     out.flush();
                 }
 
+                // 2. Extract dimensions & rotation safely
                 MediaMetadataRetriever mmr = new MediaMetadataRetriever();
                 mmr.setDataSource(tempSource.getAbsolutePath());
                 String rotStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION);
                 int rotation = rotStr != null ? Integer.parseInt(rotStr) : 0;
-                int rawW = Integer.parseInt(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH));
-                int rawH = Integer.parseInt(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT));
+                String widthStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH);
+                String heightStr = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT);
+                int rawW = widthStr != null ? Integer.parseInt(widthStr) : 720;
+                int rawH = heightStr != null ? Integer.parseInt(heightStr) : 1280;
                 mmr.release();
 
                 int videoWidth = (rotation == 90 || rotation == 270) ? rawH : rawW;
                 int videoHeight = (rotation == 90 || rotation == 270) ? rawW : rawH;
 
+                // 3. Prepare font directory
                 File fontsDir = new File(context.getCacheDir(), "export_fonts");
                 if (!fontsDir.exists()) fontsDir.mkdirs();
 
@@ -81,6 +93,7 @@ public class VideoExporter {
                 CaptionStyleOptions.prepareExportFont(context, configActive.fontOption, fontsDir);
                 CaptionStyleOptions.prepareExportFont(context, configAfter.fontOption, fontsDir);
 
+                // 4. Build ASS Subtitles
                 String assContent = AssSubtitleBuilder.build(
                         captions,
                         videoWidth,
@@ -105,10 +118,17 @@ public class VideoExporter {
 
                 mainHandler.post(() -> callback.onProgress("Baking captions into video..."));
 
-                String assPath = tempAss.getAbsolutePath().replace("\\", "/");
-                String fontsPath = fontsDir.getAbsolutePath().replace("\\", "/");
+                // 5. Strictly escape paths for FFmpeg filtergraph syntax
+                String assEscaped = tempAss.getAbsolutePath()
+                        .replace("\\", "/")
+                        .replace(":", "\\:")
+                        .replace("'", "\\'");
+                String fontsEscaped = fontsDir.getAbsolutePath()
+                        .replace("\\", "/")
+                        .replace(":", "\\:")
+                        .replace("'", "\\'");
 
-                String vfFilter = "subtitles=filename='" + assPath + "':fontsdir='" + fontsPath + "'";
+                String vfFilter = "subtitles=filename='" + assEscaped + "':fontsdir='" + fontsEscaped + "'";
 
                 String cmd = String.format(
                         "-y -i \"%s\" -vf \"%s\" -c:v mpeg4 -q:v 3 -c:a aac -b:a 128k \"%s\"",
@@ -131,11 +151,12 @@ public class VideoExporter {
                     if (rawLogs != null && rawLogs.length() > 250) {
                         rawLogs = rawLogs.substring(rawLogs.length() - 250);
                     }
-                    final String errorOutput = "Export failed (" + returnCode + "): " + (rawLogs != null ? rawLogs : "Unknown error");
+                    final String errorOutput = "Export failed (" + returnCode + "): " + (rawLogs != null ? rawLogs : "FFmpeg execution error");
                     mainHandler.post(() -> callback.onError(errorOutput));
                 }
 
             } catch (Exception e) {
+                Log.e(TAG, "Video export failed", e);
                 final String caughtMsg = "Export error: " + e.getMessage();
                 mainHandler.post(() -> callback.onError(caughtMsg));
             } finally {
@@ -150,6 +171,7 @@ public class VideoExporter {
         ContentValues values = new ContentValues();
         values.put(MediaStore.Video.Media.DISPLAY_NAME, "AutoCaption_" + System.currentTimeMillis() + ".mp4");
         values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             values.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/AutoCaption");
             values.put(MediaStore.Video.Media.IS_PENDING, 1);
@@ -158,8 +180,9 @@ public class VideoExporter {
         Uri uri = context.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
         if (uri == null) throw new Exception("Failed to create MediaStore entry");
 
-        try (InputStream in = new java.io.FileInputStream(videoFile);
+        try (InputStream in = new FileInputStream(videoFile);
              OutputStream out = context.getContentResolver().openOutputStream(uri)) {
+            if (out == null) throw new Exception("Failed to open output stream for gallery URI");
             byte[] buf = new byte[65536];
             int len;
             while ((len = in.read(buf)) > 0) {
