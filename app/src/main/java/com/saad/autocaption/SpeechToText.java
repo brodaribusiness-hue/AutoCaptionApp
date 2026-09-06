@@ -41,7 +41,6 @@ public class SpeechToText {
             try {
                 mainHandler.post(() -> callback.onProgress("Initializing speech engine..."));
 
-                // 1. Thread-safe Model Initializer / Cache
                 Model model;
                 synchronized (SpeechToText.class) {
                     String targetPath = modelDir.getAbsolutePath();
@@ -57,7 +56,6 @@ public class SpeechToText {
                     model = cachedModel;
                 }
 
-                // 2. Standard 16kHz Recognizer Setup
                 float sampleRate = 16000.0f;
                 recognizer = new Recognizer(model, sampleRate);
                 recognizer.setWords(true);
@@ -65,19 +63,18 @@ public class SpeechToText {
                 inputStream = new FileInputStream(wavFile);
                 long totalBytes = wavFile.length();
                 if (totalBytes > 44) {
-                    long skipped = inputStream.skip(44); // Skip standard 44-byte WAV header
+                    long skipped = inputStream.skip(44);
                     totalBytes -= skipped;
                 }
 
-                byte[] buffer = new byte[8192];
+                byte[] buffer = new byte[16384];
                 int bytesRead;
                 long processedBytes = 0;
                 int lastReportedPercent = -1;
                 List<String> jsonResults = new ArrayList<>();
 
-                                mainHandler.post(() -> callback.onProgress("Transcribing audio... 0%"));
+                mainHandler.post(() -> callback.onProgress("Transcribing audio... 0%"));
 
-                // 3. Streaming buffer loop
                 while ((bytesRead = inputStream.read(buffer)) >= 0) {
                     if (bytesRead > 0) {
                         processedBytes += bytesRead;
@@ -99,7 +96,6 @@ public class SpeechToText {
                     }
                 }
 
-                // 4. Capture Final Buffer Chunk (Vital for last words)
                 String finalResult = recognizer.getFinalResult();
                 if (finalResult != null && !finalResult.trim().isEmpty()) {
                     jsonResults.add(finalResult);
@@ -122,7 +118,6 @@ public class SpeechToText {
                     } catch (Exception ignored) {}
                 }
 
-                // 5. Safe native cleanup when all background jobs complete
                 synchronized (SpeechToText.class) {
                     activeRecognitions--;
                     if (activeRecognitions == 0 && releasePending) {
@@ -137,7 +132,8 @@ public class SpeechToText {
                     }
                 }
             }
-
+        }).start();
+    }
 
     public static synchronized void releaseModel() {
         if (activeRecognitions > 0) {
