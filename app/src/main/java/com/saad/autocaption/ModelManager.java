@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -16,18 +17,18 @@ import java.util.zip.ZipInputStream;
 
 public class ModelManager {
 
+    private static final String TAG = "ModelManager";
+
     private static final String MODEL_URL =
             "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip";
 
     private static final String MODEL_FOLDER_NAME =
             "vosk-model-small-en-us-0.15";
 
-    // FIX: marker file used to confirm the model extracted completely,
-    // instead of just checking that the folder exists.
     private static final String MODEL_MARKER_FILE = "am/final.mdl";
 
-    private static final int CONNECT_TIMEOUT_MS = 15000;
-    private static final int READ_TIMEOUT_MS = 15000;
+    private static final int CONNECT_TIMEOUT_MS = 30000;
+    private static final int READ_TIMEOUT_MS = 30000;
 
     public interface ModelCallback {
         void onProgress(String message);
@@ -36,24 +37,48 @@ public class ModelManager {
     }
 
     public static boolean isModelReady(Context context) {
-        File modelDir = new File(context.getFilesDir(), MODEL_FOLDER_NAME);
+        File modelDir = getModelDir(context);
         if (!modelDir.exists() || !modelDir.isDirectory()) {
             return false;
         }
-        // FIX: verify a known internal file exists too, so a partial/
-        // interrupted extraction isn't mistaken for a ready model.
         File marker = new File(modelDir, MODEL_MARKER_FILE);
-        return marker.exists() && marker.length() > 0;
+        if (marker.exists() && marker.length() > 0) {
+            return true;
+        }
+        // Check if marker exists directly inside subfolder
+        File[] children = modelDir.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                if (child.isDirectory()) {
+                    File nestedMarker = new File(child, MODEL_MARKER_FILE);
+                    if (nestedMarker.exists() && nestedMarker.length() > 0) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     public static File getModelDir(Context context) {
-        return new File(context.getFilesDir(), MODEL_FOLDER_NAME);
+        File targetDir = new File(context.getFilesDir(), MODEL_FOLDER_NAME);
+        File marker = new File(targetDir, MODEL_MARKER_FILE);
+        if (marker.exists() && marker.length() > 0) {
+            return targetDir;
+        }
+        // Fallback for nested folder
+        File[] children = targetDir.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                if (child.isDirectory() && new File(child, MODEL_MARKER_FILE).exists()) {
+                    return child;
+                }
+            }
+        }
+        return targetDir;
     }
 
-    public static void downloadAndSetupModel(
-            Context context,
-            ModelCallback callback) {
-
+    public static void downloadAndSetupModel(Context context, ModelCallback callback) {
         if (isModelReady(context)) {
             callback.onSuccess(getModelDir(context));
             return;
@@ -61,67 +86,97 @@ public class ModelManager {
 
         Handler mainHandler = new Handler(Looper.getMainLooper());
 
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                File zipFile = new File(
-                        context.getCacheDir(),
-                        "model_" + System.currentTimeMillis() + ".zip");
-                File tempExtractDir = new File(
-                        context.getCacheDir(),
-                        "model_extract_" + System.currentTimeMillis());
-                try {
-                    postIfAlive(context, mainHandler, () ->
-                            callback.onProgress("Downloading speech model..."));
+        new Thread(() -> {
+            File zipFile = new File(context.getCacheDir(), "model_" + System.currentTimeMillis() + ".zip");
+            File tempExtractDir = new File(context.getCacheDir(), "model_extract_" + System.currentTimeMillis());
 
-                    downloadFile(MODEL_URL, zipFile, context, mainHandler, callback);
+            try {
+                postIfAlive(context, mainHandler, () -> callback.onProgress("Connecting to speech model server..."));
 
-                    postIfAlive(context, mainHandler, () ->
-                            callback.onProgress("Extracting model..."));
+                downloadWithRedirects(MODEL_URL, zipFile, context, mainHandler, callback);
 
-                    // FIX: extract into a temp folder first, then move it into
-                    // place atomically — so a crash mid-extraction never leaves
-                    // a folder in files-dir that looks "ready" but isn't.
-                    tempExtractDir.mkdirs();
-                    unzip(zipFile, tempExtractDir);
+                postIfAlive(context, mainHandler, () -> callback.onProgress("Extracting model archive..."));
 
-                    File finalModelDir = getModelDir(context);
-                    File extractedModelDir = new File(tempExtractDir, MODEL_FOLDER_NAME);
+                if (!tempExtractDir.exists()) tempExtractDir.mkdirs();
+                unzip(zipFile, tempExtractDir);
 
-                    if (!extractedModelDir.exists()) {
-                        throw new Exception(
-                                "Extracted archive did not contain expected model folder");
-                    }
-
-                    if (finalModelDir.exists()) {
-                        deleteRecursive(finalModelDir);
-                    }
-                    if (!extractedModelDir.renameTo(finalModelDir)) {
-                        throw new Exception("Could not move extracted model into place");
-                    }
-
-                    zipFile.delete();
-                    deleteRecursive(tempExtractDir);
-
-                    if (!isModelReady(context)) {
-                        throw new Exception("Model extraction incomplete");
-                    }
-
-                    postIfAlive(context, mainHandler, () -> callback.onSuccess(finalModelDir));
-
-                } catch (Exception e) {
-                    zipFile.delete();
-                    deleteRecursive(tempExtractDir);
-                    String message = e.getMessage() != null ? e.getMessage() : e.toString();
-                    postIfAlive(context, mainHandler, () ->
-                            callback.onError("Model setup failed: " + message));
+                // Find valid model root containing marker file
+                File validExtractedRoot = findModelRoot(tempExtractDir);
+                if (validExtractedRoot == null) {
+                    throw new Exception("Archive does not contain a valid Vosk model directory");
                 }
+
+                File finalModelDir = new File(context.getFilesDir(), MODEL_FOLDER_NAME);
+                if (finalModelDir.exists()) {
+                    deleteRecursive(finalModelDir);
+                }
+
+                // Safe recursive copy instead of atomic rename
+                copyDirectory(validExtractedRoot, finalModelDir);
+
+                zipFile.delete();
+                deleteRecursive(tempExtractDir);
+
+                if (!isModelReady(context)) {
+                    throw new Exception("Model verification failed after extraction");
+                }
+
+                File readyDir = getModelDir(context);
+                postIfAlive(context, mainHandler, () -> callback.onSuccess(readyDir));
+
+            } catch (Exception e) {
+                Log.e(TAG, "Speech model setup error", e);
+                if (zipFile.exists()) zipFile.delete();
+                if (tempExtractDir.exists()) deleteRecursive(tempExtractDir);
+
+                String msg = e.getMessage() != null ? e.getMessage() : e.toString();
+                postIfAlive(context, mainHandler, () -> callback.onError("Model setup failed: " + msg));
             }
         }).start();
     }
 
-    // FIX: skip posting UI callbacks if the owning Activity has already
-    // finished/been destroyed (prevents crashes touching dead views).
+    private static File findModelRoot(File root) {
+        if (new File(root, MODEL_MARKER_FILE).exists()) {
+            return root;
+        }
+        File[] list = root.listFiles();
+        if (list != null) {
+            for (File f : list) {
+                if (f.isDirectory()) {
+                    File found = findModelRoot(f);
+                    if (found != null) return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static void copyDirectory(File source, File destination) throws Exception {
+        if (source.isDirectory()) {
+            if (!destination.exists() && !destination.mkdirs()) {
+                throw new Exception("Cannot create target directory: " + destination.getAbsolutePath());
+            }
+            String[] children = source.list();
+            if (children != null) {
+                for (String child : children) {
+                    copyDirectory(new File(source, child), new File(destination, child));
+                }
+            }
+        } else {
+            File parent = destination.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            try (InputStream in = new FileInputStream(source);
+                 FileOutputStream out = new FileOutputStream(destination)) {
+                byte[] buf = new byte[65536];
+                int len;
+                while ((len = in.read(buf)) > 0) {
+                    out.write(buf, 0, len);
+                }
+                out.flush();
+            }
+        }
+    }
+
     private static void postIfAlive(Context context, Handler handler, Runnable r) {
         handler.post(() -> {
             if (context instanceof Activity) {
@@ -134,35 +189,45 @@ public class ModelManager {
         });
     }
 
-    private static void downloadFile(
-            String urlString,
+    private static void downloadWithRedirects(
+            String initialUrl,
             File outputFile,
             Context context,
             Handler mainHandler,
             ModelCallback callback) throws Exception {
 
-        URL url = new URL(urlString);
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-        connection.setReadTimeout(READ_TIMEOUT_MS);
+        String currentUrl = initialUrl;
+        HttpURLConnection connection = null;
 
-        try {
-            connection.connect();
+        for (int redirectCount = 0; redirectCount < 5; redirectCount++) {
+            URL url = new URL(currentUrl);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setInstanceFollowRedirects(true);
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
 
-            // FIX: verify the server actually returned the file (not an
-            // error page) before treating the response body as a zip.
-            int responseCode = connection.getResponseCode();
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                throw new Exception(
-                        "Server returned HTTP " + responseCode + " while downloading model");
+            int status = connection.getResponseCode();
+            if (status == HttpURLConnection.HTTP_MOVED_TEMP ||
+                status == HttpURLConnection.HTTP_MOVED_PERM ||
+                status == 307 || status == 308) {
+                String newUrl = connection.getHeaderField("Location");
+                connection.disconnect();
+                if (newUrl != null && !newUrl.isEmpty()) {
+                    currentUrl = newUrl;
+                    continue;
+                }
+            }
+
+            if (status != HttpURLConnection.HTTP_OK) {
+                connection.disconnect();
+                throw new Exception("Server responded with HTTP " + status);
             }
 
             int fileLength = connection.getContentLength();
-
             try (InputStream input = connection.getInputStream();
                  FileOutputStream output = new FileOutputStream(outputFile)) {
 
-                byte[] buffer = new byte[8192];
+                byte[] buffer = new byte[16384];
                 long total = 0;
                 int count;
                 int lastPercent = -1;
@@ -177,35 +242,30 @@ public class ModelManager {
                             lastPercent = percent;
                             int finalPercent = percent;
                             postIfAlive(context, mainHandler, () ->
-                                    callback.onProgress(
-                                            "Downloading speech model... " + finalPercent + "%"));
+                                    callback.onProgress("Downloading speech model... " + finalPercent + "%"));
                         }
                     }
                 }
+                output.flush();
+                return;
+            } finally {
+                connection.disconnect();
             }
-        } finally {
-            connection.disconnect();
         }
+        throw new Exception("Too many redirects while downloading speech model");
     }
 
     private static void unzip(File zipFile, File targetDirectory) throws Exception {
-
         String canonicalTargetPath = targetDirectory.getCanonicalPath();
 
-        try (ZipInputStream zipInputStream =
-                     new ZipInputStream(new FileInputStream(zipFile))) {
-
+        try (ZipInputStream zipInputStream = new ZipInputStream(new FileInputStream(zipFile))) {
             ZipEntry entry;
             while ((entry = zipInputStream.getNextEntry()) != null) {
-
                 File newFile = new File(targetDirectory, entry.getName());
-
-                // FIX (Zip Slip): make sure the resolved path is actually
-                // inside targetDirectory before writing anything there.
                 String canonicalNewFilePath = newFile.getCanonicalPath();
-                if (!canonicalNewFilePath.equals(canonicalTargetPath)
-                        && !canonicalNewFilePath.startsWith(canonicalTargetPath + File.separator)) {
-                    throw new Exception("Zip entry is outside target dir: " + entry.getName());
+
+                if (!canonicalNewFilePath.startsWith(canonicalTargetPath)) {
+                    throw new Exception("Zip entry path traversal error: " + entry.getName());
                 }
 
                 if (entry.isDirectory()) {
@@ -217,11 +277,12 @@ public class ModelManager {
                     }
 
                     try (FileOutputStream fos = new FileOutputStream(newFile)) {
-                        byte[] buffer = new byte[8192];
+                        byte[] buffer = new byte[16384];
                         int len;
                         while ((len = zipInputStream.read(buffer)) > 0) {
                             fos.write(buffer, 0, len);
                         }
+                        fos.flush();
                     }
                 }
                 zipInputStream.closeEntry();
@@ -230,9 +291,7 @@ public class ModelManager {
     }
 
     private static void deleteRecursive(File file) {
-        if (file == null || !file.exists()) {
-            return;
-        }
+        if (file == null || !file.exists()) return;
         if (file.isDirectory()) {
             File[] children = file.listFiles();
             if (children != null) {
