@@ -12,11 +12,6 @@ public class CaptionParser {
 
     private static final String TAG = "CaptionParser";
 
-    // FIX: Vosk emits one JSON object per detected utterance/pause, not a
-    // single JSON for the whole file. This merges all of them, in order,
-    // into one caption list. Word timestamps are already continuous
-    // across calls on the same Recognizer instance, so no offset math
-    // is needed here — just concatenation.
     public static List<Caption> parseVoskResults(List<String> jsonResults) {
         List<Caption> allCaptions = new ArrayList<>();
         if (jsonResults == null) {
@@ -50,6 +45,11 @@ public class CaptionParser {
                         float endTime = (float) item.optDouble("end", 0.0);
                         float confidence = (float) item.optDouble("conf", 1.0);
 
+                        // Fallback safety: endTime must be greater than startTime
+                        if (endTime <= startTime) {
+                            endTime = startTime + 0.35f;
+                        }
+
                         Caption caption = new Caption(word, startTime, endTime, confidence);
                         captions.add(caption);
                     }
@@ -57,26 +57,23 @@ public class CaptionParser {
             }
 
         } catch (Exception e) {
-            // FIX: was silently swallowed with only printStackTrace(),
-            // which is invisible in a release build. Now logged with
-            // Log.e so a parse failure is actually visible in Logcat.
             Log.e(TAG, "Failed to parse Vosk result chunk: " + jsonResult, e);
         }
 
         return captions;
     }
 
-    public static String getCaptionAtTime(
-            List<Caption> captions,
-            long currentTimeMs) {
+    // GAP-PROOF: 0.35s tolerance buffer stops sudden text disappearing
+    public static String getCaptionAtTime(List<Caption> captions, long currentTimeMs) {
+        if (captions == null || captions.isEmpty()) {
+            return "";
+        }
 
         float currentTimeSec = currentTimeMs / 1000.0f;
-
         StringBuilder sb = new StringBuilder();
 
         for (Caption caption : captions) {
-            if (currentTimeSec >= caption.startTime &&
-                    currentTimeSec < caption.endTime) {
+            if (currentTimeSec >= caption.startTime && currentTimeSec <= (caption.endTime + 0.35f)) {
                 sb.append(caption.word).append(" ");
             }
         }
