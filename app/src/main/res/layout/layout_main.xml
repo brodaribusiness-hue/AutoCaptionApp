@@ -40,13 +40,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
 
+            <!-- Single Horizontal Center Ribbon (Prevents Jumbled Text Overlap) -->
             <LinearLayout
                 android:id="@+id/captionLayer"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
                 android:gravity="center"
                 android:orientation="horizontal"
-                android:elevation="30dp"
+                android:layout_marginBottom="40dp"
+                android:elevation="40dp"
                 android:clipChildren="false"
                 android:clipToPadding="false">
 
@@ -55,9 +58,12 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="#CCCCCC"
-                    android:textSize="24sp"
-                    android:elevation="35dp"
-                    android:padding="6dp" />
+                    android:textSize="22sp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:gravity="center"
+                    android:minWidth="20dp"
+                    android:includeFontPadding="false" />
 
                 <TextView
                     android:id="@+id/wordSlotActive"
@@ -66,23 +72,29 @@
                     android:textColor="#FFFF00"
                     android:textStyle="bold"
                     android:textSize="24sp"
-                    android:elevation="35dp"
-                    android:padding="6dp" />
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:gravity="center"
+                    android:minWidth="20dp"
+                    android:includeFontPadding="false" />
 
                 <TextView
                     android:id="@+id/wordSlotAfter"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="#CCCCCC"
-                    android:textSize="24sp"
-                    android:elevation="35dp"
-                    android:padding="6dp" />
+                    android:textSize="22sp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:gravity="center"
+                    android:minWidth="20dp"
+                    android:includeFontPadding="false" />
 
             </LinearLayout>
 
         </com.saad.autocaption.AspectRatioFrameLayout>
 
-        <!-- Video Player Control Bar -->
+        <!-- Player Controls Bar -->
         <LinearLayout
             android:id="@+id/playerControlLayout"
             android:layout_width="match_parent"
@@ -149,7 +161,7 @@
 
         </LinearLayout>
 
-        <!-- Segmented Tab Bar for Slot Customization -->
+        <!-- Slot Picker Tab Bar -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -246,6 +258,13 @@
             android:background="#1E1E1E"
             android:popupBackground="#1E1E1E"
             android:layout_marginTop="4dp" />
+
+        <Button
+            android:id="@+id/boxColorButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Box Background Color"
+            android:layout_marginTop="10dp" />
 
         <TextView
             android:id="@+id/statusText"
