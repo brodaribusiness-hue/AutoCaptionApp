@@ -75,7 +75,7 @@ public class SpeechToText {
                 int lastReportedPercent = -1;
                 List<String> jsonResults = new ArrayList<>();
 
-                mainHandler.post(() -> callback.onProgress("Transcribing audio... 0%"));
+                                mainHandler.post(() -> callback.onProgress("Transcribing audio... 0%"));
 
                 // 3. Streaming buffer loop
                 while ((bytesRead = inputStream.read(buffer)) >= 0) {
@@ -137,8 +137,7 @@ public class SpeechToText {
                     }
                 }
             }
-        }).start();
-    }
+
 
     public static synchronized void releaseModel() {
         if (activeRecognitions > 0) {
