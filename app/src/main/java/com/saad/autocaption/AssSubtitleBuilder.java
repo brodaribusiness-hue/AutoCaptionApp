@@ -5,8 +5,8 @@ import java.util.Locale;
 
 public class AssSubtitleBuilder {
 
-    private static final int GROUP_SIZE = CaptionGrouper.DEFAULT_GROUP_SIZE; //[span_7](start_span)[span_7](end_span)[span_8](start_span)[span_8](end_span)
-    private static final int GREEN_EMPHASIS_COLOR = 0xFF00E676; //[span_9](start_span)[span_9](end_span)
+    private static final int GROUP_SIZE = CaptionGrouper.DEFAULT_GROUP_SIZE;
+    private static final int GREEN_EMPHASIS_COLOR = 0xFF00E676;
 
     public static String build(
             List<Caption> captions,
@@ -26,7 +26,7 @@ public class AssSubtitleBuilder {
         sb.append("[Script Info]\nScriptType: v4.00+\nPlayResX: ")
                 .append(videoWidth).append("\nPlayResY: ").append(videoHeight).append("\n\n");
 
-        // Crisp Vector Font Scaling based on 720p base standard
+        // Native canvas vector scaling (Reference height 720p)
         float scaleFactor = (float) videoHeight / 720f;
         int assFontSize = Math.round(fontSizeSp * 2.2f * scaleFactor);
 
@@ -38,7 +38,7 @@ public class AssSubtitleBuilder {
                 + "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
                 + "Alignment, MarginL, MarginR, MarginV, Encoding\n");
 
-        // Alignment 2 = Bottom-Center (Matches Android bottom-gravity layout perfectly)
+        // Alignment 2 = Bottom Center (Synchronized with Android layout_gravity="bottom|center_horizontal")
         int marginV = Math.round(videoHeight * 0.08f);
         sb.append(String.format(Locale.US,
                 "Style: Default,%s,%d,&HFFFFFF&,&HFFFFFF&,%s,%s,1,0,0,0,100,100,0,0,1,3,0,2,20,20,%d,1\n\n",
@@ -50,13 +50,13 @@ public class AssSubtitleBuilder {
         float previewToVideoX = videoWidth / (float) Math.max(previewWidthPx, 1);
         float previewToVideoY = videoHeight / (float) Math.max(previewHeightPx, 1);
 
-        // Map base coordinates: X to center, Y to bottom margin baseline
+        // Baseline coordinate mapping matching preview layout anchors
         int baseX = videoWidth / 2;
         int baseY = videoHeight - marginV;
 
         boolean oneWordPunch = configActive.styleType == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
         boolean cumulativeBuildUp = configActive.styleType == CaptionStyleOptions.CaptionStyleType.CUMULATIVE_BUILD_UP;
-        List<CaptionGrouper.Group> groups = CaptionGrouper.group(captions, GROUP_SIZE); //[span_10](start_span)[span_10](end_span)
+        List<CaptionGrouper.Group> groups = CaptionGrouper.group(captions, GROUP_SIZE);
 
         for (CaptionGrouper.Group group : groups) {
             List<Caption> words = group.words;
@@ -144,22 +144,21 @@ public class AssSubtitleBuilder {
             return base + "\\c" + colorAss + "\\bord2\\shad0\\fscx" + baseScalePercent + "\\fscy" + baseScalePercent;
         }
 
-        // Active Speaking Word effects with scale multiplier applied directly once
         switch (style) {
             case GLOW_POP:
                 int glowScale = Math.round(baseScalePercent * 1.12f);
-                return base + "\\c" + colorAss + "\\bord4\\shad0\\blur8\\3c" + colorAss 
+                return base + "\\c" + colorAss + "\\bord4\\shad0\\blur8\\3c" + colorAss
                         + "\\fscx" + glowScale + "\\fscy" + glowScale + "\\b1";
             case HIGHLIGHT_POP:
                 int popScale = Math.round(baseScalePercent * 1.18f);
                 return base + "\\c" + colorAss + "\\fscx" + popScale + "\\fscy" + popScale + "\\b1";
             case GREEN_EMPHASIS:
                 int greenScale = Math.round(baseScalePercent * 1.10f);
-                return base + "\\c" + toAssColor(GREEN_EMPHASIS_COLOR) 
+                return base + "\\c" + toAssColor(GREEN_EMPHASIS_COLOR)
                         + "\\fscx" + greenScale + "\\fscy" + greenScale + "\\b1";
             case BOUNCE:
                 int bounceMax = Math.round(baseScalePercent * 1.20f);
-                return base + "\\c" + colorAss 
+                return base + "\\c" + colorAss
                         + "\\t(0,200,\\fscx" + bounceMax + "\\fscy" + bounceMax + ")"
                         + "\\t(200,400,\\fscx" + baseScalePercent + "\\fscy" + baseScalePercent + ")";
             case ONE_WORD_PUNCH:
