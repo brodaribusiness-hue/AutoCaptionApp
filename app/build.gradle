@@ -18,9 +18,14 @@ android {
         }
     }
 
-    packagingOptions {
+    packaging {
         jniLibs {
-            useLegacyPackaging = true
+            pickFirsts.add("**/libc++_shared.so")
+            pickFirsts.add("**/libjnidispatch.so")
+            useLegacyPackaging = false
+        }
+        resources {
+            excludes.add("META-INF/**")
         }
     }
 
