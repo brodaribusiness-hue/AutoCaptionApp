@@ -31,7 +31,7 @@ jobs:
           gradle-version: 8.7
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace --info
 
       - name: Publish APK to GitHub Release
         uses: softprops/action-gh-release@v2
