@@ -6,11 +6,19 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 public class CaptionParser {
 
     private static final String TAG = "CaptionParser";
+
+    // Minimum gap enforced between the end of one word and the start of
+    // the next, so two caption events can never be visible at the exact
+    // same instant (that was causing garbled/overlapping text on screen).
+    private static final float MIN_GAP_SEC = 0.02f;
+    private static final float MIN_WORD_DURATION_SEC = 0.05f;
 
     public static List<Caption> parseVoskResults(List<String> jsonResults) {
         List<Caption> allCaptions = new ArrayList<>();
@@ -20,6 +28,7 @@ public class CaptionParser {
         for (String jsonResult : jsonResults) {
             allCaptions.addAll(parseVoskResult(jsonResult));
         }
+        sanitizeTimings(allCaptions);
         return allCaptions;
     }
 
@@ -61,6 +70,45 @@ public class CaptionParser {
         }
 
         return captions;
+    }
+
+    // Vosk can occasionally hand back words whose timestamps overlap by a
+    // few milliseconds (especially across streaming-chunk boundaries).
+    // When that happens, two words end up "active" at the exact same
+    // instant, so both get drawn on top of each other -> garbled text in
+    // both the live preview and the exported video. This pass guarantees
+    // the word list is sorted and strictly non-overlapping in time.
+    private static void sanitizeTimings(List<Caption> captions) {
+        if (captions == null || captions.size() < 2) return;
+
+        Collections.sort(captions, new Comparator<Caption>() {
+            @Override
+            public int compare(Caption a, Caption b) {
+                return Float.compare(a.startTime, b.startTime);
+            }
+        });
+
+        for (int i = 0; i < captions.size() - 1; i++) {
+            Caption current = captions.get(i);
+            Caption next = captions.get(i + 1);
+
+            if (next.startTime < current.startTime + MIN_WORD_DURATION_SEC) {
+                next.startTime = current.startTime + MIN_WORD_DURATION_SEC;
+            }
+
+            if (current.endTime > next.startTime - MIN_GAP_SEC) {
+                current.endTime = next.startTime - MIN_GAP_SEC;
+            }
+
+            if (current.endTime <= current.startTime) {
+                current.endTime = current.startTime + MIN_WORD_DURATION_SEC;
+            }
+        }
+
+        Caption last = captions.get(captions.size() - 1);
+        if (last.endTime <= last.startTime) {
+            last.endTime = last.startTime + MIN_WORD_DURATION_SEC;
+        }
     }
 
     // GAP-PROOF: 0.35s tolerance buffer stops sudden text disappearing
