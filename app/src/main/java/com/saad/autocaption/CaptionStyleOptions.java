@@ -123,7 +123,6 @@ public class CaptionStyleOptions {
                 new FontOption("Montserrat Alt ExtraBold", "fonts/MontserratAlternates-ExtraBold.ttf", Typeface.SANS_SERIF, "Montserrat Alternates", null),
                 new FontOption("Montserrat Alt BlackItalic", "fonts/MontserratAlternates-BlackItalic.ttf", Typeface.SANS_SERIF, "Montserrat Alternates", null),
                 new FontOption("Petit Formal Script", "fonts/PetitFormalScript-Regular.ttf", Typeface.SERIF, "Petit Formal Script", null),
-                new FontOption("Playfair Display Regular", "fonts/PlayfairDisplay-Regular.ttf", Typeface.SERIF, "Playfair Display", null),
                 new FontOption("Playfair Display Bold", "fonts/PlayfairDisplay-Bold.ttf", Typeface.SERIF, "Playfair Display", null),
                 new FontOption("Playfair Display Black", "fonts/PlayfairDisplay-Black.ttf", Typeface.SERIF, "Playfair Display", null),
                 new FontOption("Playfair Display Italic", "fonts/PlayfairDisplay-Italic.ttf", Typeface.SERIF, "Playfair Display", null),
