@@ -75,7 +75,8 @@ public class AssSubtitleBuilder {
 
                     int wordCol = cap.resolveColor(cfg.textColor);
                     String wordColAss = toAssColor(wordCol);
-                    String wordTag = buildWordStyleTag(cfg.styleType, wordColAss, cfg.fontOption.exportFamilyName, true, slot.scale);
+                    String wordTag = buildWordStyleTag(cfg.styleType, wordColAss, cfg.fontOption.exportFamilyName,
+                            true, slot.scale, assFontSize, toAssColor(cfg.boxColor != 0 ? cfg.boxColor : 0xFF000000));
 
                     appendWordLine(sb, startTime, endTime, cap.word,
                             slot, baseX, baseY, previewToVideoX, previewToVideoY, wordTag);
@@ -88,7 +89,8 @@ public class AssSubtitleBuilder {
 
                     int col = activeWord.resolveColor(configActive.textColor);
                     String colAss = toAssColor(col);
-                    String tag = buildWordStyleTag(configActive.styleType, colAss, configActive.fontOption.exportFamilyName, true, activeSlot.scale);
+                    String tag = buildWordStyleTag(configActive.styleType, colAss, configActive.fontOption.exportFamilyName,
+                            true, activeSlot.scale, assFontSize, toAssColor(configActive.boxColor != 0 ? configActive.boxColor : 0xFF000000));
 
                     appendWordLine(sb, startTime, endTime, activeWord.word,
                             activeSlot, baseX, baseY, previewToVideoX, previewToVideoY, tag);
@@ -108,7 +110,8 @@ public class AssSubtitleBuilder {
 
                         int wordCol = cap.resolveColor(cfg.textColor);
                         String wordColAss = toAssColor(wordCol);
-                        String wordTag = buildWordStyleTag(cfg.styleType, wordColAss, cfg.fontOption.exportFamilyName, isSpeaking, slot.scale);
+                        String wordTag = buildWordStyleTag(cfg.styleType, wordColAss, cfg.fontOption.exportFamilyName,
+                                isSpeaking, slot.scale, assFontSize, toAssColor(cfg.boxColor != 0 ? cfg.boxColor : 0xFF000000));
 
                         appendWordLine(sb, startTime, endTime, cap.word,
                                 slot, baseX, baseY, previewToVideoX, previewToVideoY, wordTag);
@@ -136,7 +139,8 @@ public class AssSubtitleBuilder {
     }
 
     private static String buildWordStyleTag(
-            CaptionStyleOptions.CaptionStyleType style, String colorAss, String fontName, boolean isSpeaking, float userScale) {
+            CaptionStyleOptions.CaptionStyleType style, String colorAss, String fontName, boolean isSpeaking,
+            float userScale, int fontSizePx, String boxColorAss) {
         String base = "\\fn" + fontName;
         int baseScalePercent = Math.round(userScale * 100f);
 
@@ -167,6 +171,14 @@ public class AssSubtitleBuilder {
             case CUMULATIVE_BUILD_UP:
                 int cumScale = Math.round(baseScalePercent * 1.08f);
                 return base + "\\c" + colorAss + "\\fscx" + cumScale + "\\fscy" + cumScale + "\\b1";
+            case BOX_HIGHLIGHT:
+                // libass has no native rounded-box tag, so we fake a solid
+                // background block by giving the glyphs a thick same-color
+                // outline (\bord) in the chosen box color — matches the
+                // BackgroundBoxSpan look used in the live preview.
+                int boxBord = Math.max(2, Math.round(fontSizePx * 0.22f));
+                return base + "\\1c" + colorAss + "\\3c" + boxColorAss
+                        + "\\bord" + boxBord + "\\shad0\\fscx" + baseScalePercent + "\\fscy" + baseScalePercent + "\\b1";
             case MINIMAL_CLEAN:
             default:
                 return base + "\\c" + colorAss + "\\fscx" + baseScalePercent + "\\fscy" + baseScalePercent + "\\b1";
