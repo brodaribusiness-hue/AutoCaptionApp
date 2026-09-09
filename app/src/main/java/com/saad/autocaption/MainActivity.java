@@ -766,13 +766,20 @@ public class MainActivity extends AppCompatActivity {
             applySlotStyle(wordSlotActive, group.words.get(safeActive), configSlotActive, true);
             wordSlotAfter.setText("");
         } else if (cumulativeBuildUp) {
-            // Typewriter / Cumulative Build-Up Flow
+            // Typewriter / Cumulative Build-Up Flow.
+            // Whichever word is CURRENTLY being spoken always uses
+            // configSlotActive's look (color/style), regardless of which
+            // screen slot it happens to render in — matches export.
             Caption cap1 = (group.words.size() > 0) ? group.words.get(0) : null;
             Caption cap2 = (group.words.size() > 1) ? group.words.get(1) : null;
             Caption cap3 = (group.words.size() > 2) ? group.words.get(2) : null;
 
+            SlotStyleConfig cfg1 = (safeActive == 0) ? configSlotActive : configSlotBefore;
+            SlotStyleConfig cfg2 = (safeActive == 1) ? configSlotActive : (safeActive < 1 ? configSlotBefore : configSlotActive);
+            SlotStyleConfig cfg3 = (safeActive == 2) ? configSlotActive : configSlotAfter;
+
             if (safeActive == 0) {
-                applySlotStyle(wordSlotBefore, cap1, configSlotBefore, true);
+                applySlotStyle(wordSlotBefore, cap1, cfg1, true);
                 wordSlotActive.setText("");
                 wordSlotAfter.setText("");
             } else if (safeActive == 1) {
@@ -785,14 +792,25 @@ public class MainActivity extends AppCompatActivity {
                 applySlotStyle(wordSlotAfter, cap3, configSlotAfter, true);
             }
         } else {
-            // Sequential Glowing Flow (1 -> 2 -> 3)
+            // Sequential Glowing Flow (1 -> 2 -> 3).
+            // FIX: previously cap1/cap2/cap3 were hard-tied to
+            // configSlotBefore/Active/After by screen position, so the
+            // word actually being spoken only turned yellow+glow when it
+            // landed in the middle slot — 1st/3rd-position spoken words
+            // stayed in the dim before/after color and could balloon in
+            // size off-screen. Now the ACTUALLY SPOKEN word always uses
+            // configSlotActive, matching exported video exactly.
             Caption cap1 = (group.words.size() > 0) ? group.words.get(0) : null;
             Caption cap2 = (group.words.size() > 1) ? group.words.get(1) : null;
             Caption cap3 = (group.words.size() > 2) ? group.words.get(2) : null;
 
-            applySlotStyle(wordSlotBefore, cap1, configSlotBefore, safeActive == 0);
-            applySlotStyle(wordSlotActive, cap2, configSlotActive, safeActive == 1);
-            applySlotStyle(wordSlotAfter, cap3, configSlotAfter, safeActive == 2);
+            SlotStyleConfig cfg1 = (safeActive == 0) ? configSlotActive : configSlotBefore;
+            SlotStyleConfig cfg2 = (safeActive == 1) ? configSlotActive : (safeActive < 1 ? configSlotBefore : configSlotAfter);
+            SlotStyleConfig cfg3 = (safeActive == 2) ? configSlotActive : configSlotAfter;
+
+            applySlotStyle(wordSlotBefore, cap1, cfg1, safeActive == 0);
+            applySlotStyle(wordSlotActive, cap2, cfg2, safeActive == 1);
+            applySlotStyle(wordSlotAfter, cap3, cfg3, safeActive == 2);
         }
     }
 
