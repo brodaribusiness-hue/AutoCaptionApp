@@ -26,6 +26,14 @@ public class VideoExporter {
 
     private static final String TAG = "VideoExporter";
 
+    // Try the hardware H.264 encoder first (best quality/compatibility);
+    // fall back to the software mpeg4 encoder if the device/build can't
+    // run it (the ffmpeg-kit-16kb fork has no libx264, only these two).
+    private static final String[] VIDEO_CODEC_ARGS = {
+            "-c:v h264_mediacodec -b:v 6M",
+            "-c:v mpeg4 -q:v 3"
+    };
+
     public interface ExportCallback {
         void onProgress(String message);
         void onSuccess(Uri savedUri);
@@ -130,22 +138,38 @@ public class VideoExporter {
 
                 String vfFilter = "subtitles=filename='" + assEscaped + "':fontsdir='" + fontsEscaped + "'";
 
-                String cmd = String.format(
-                        "-y -i \"%s\" -vf \"%s\" -c:v mpeg4 -q:v 3 -c:a aac -b:a 128k \"%s\"",
-                        tempSource.getAbsolutePath(),
-                        vfFilter,
-                        tempOutput.getAbsolutePath());
+                // 6. Try each video codec in order until one produces a valid file
+                FFmpegSession session = null;
+                ReturnCode returnCode = null;
+                boolean success = false;
 
-                FFmpegSession session = FFmpegKit.execute(cmd);
-                ReturnCode returnCode = session.getReturnCode();
+                for (String codecArgs : VIDEO_CODEC_ARGS) {
+                    if (tempOutput.exists()) tempOutput.delete();
 
-                if (ReturnCode.isSuccess(returnCode) && tempOutput.exists() && tempOutput.length() > 1024) {
+                    String cmd = String.format(
+                            "-y -i \"%s\" -vf \"%s\" %s -c:a aac -b:a 128k \"%s\"",
+                            tempSource.getAbsolutePath(),
+                            vfFilter,
+                            codecArgs,
+                            tempOutput.getAbsolutePath());
+
+                    session = FFmpegKit.execute(cmd);
+                    returnCode = session.getReturnCode();
+
+                    if (ReturnCode.isSuccess(returnCode) && tempOutput.exists() && tempOutput.length() > 1024) {
+                        success = true;
+                        break;
+                    }
+                    Log.w(TAG, "Codec attempt failed (" + codecArgs + "), trying next fallback if available");
+                }
+
+                if (success) {
                     mainHandler.post(() -> callback.onProgress("Saving to gallery..."));
                     Uri galleryUri = saveToGallery(context, tempOutput);
                     mainHandler.post(() -> callback.onSuccess(galleryUri));
                 } else {
-                    String rawLogs = session.getFailStackTrace();
-                    if (rawLogs == null || rawLogs.trim().isEmpty()) {
+                    String rawLogs = session != null ? session.getFailStackTrace() : null;
+                    if ((rawLogs == null || rawLogs.trim().isEmpty()) && session != null) {
                         rawLogs = session.getOutput();
                     }
                     if (rawLogs != null && rawLogs.length() > 250) {
