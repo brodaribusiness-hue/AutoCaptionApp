@@ -51,6 +51,7 @@ public class MainActivity extends AppCompatActivity {
     private Spinner fontStyleSpinner;
     private Spinner captionColorSpinner;
     private Spinner captionStyleSpinner;
+    private Button boxColorButton;
     private AspectRatioFrameLayout videoPreviewContainer;
 
     private Button playPauseButton;
@@ -101,13 +102,14 @@ public class MainActivity extends AppCompatActivity {
         CaptionStyleOptions.FontOption defaultFont = CaptionStyleOptions.getFontOptions()[0];
         Typeface defaultTf = CaptionStyleOptions.resolveTypeface(this, defaultFont);
 
-        // Box highlight replaced completely with standard Glow Pop
+        // Box Highlight now has a real box color (opaque black by default,
+        // changeable via the "Box Background Color" button).
         configSlotBefore = new SlotStyleConfig(defaultFont, defaultTf, 0xFFCCCCCC,
-                CaptionStyleOptions.CaptionStyleType.GLOW_POP, 0x00000000);
+                CaptionStyleOptions.CaptionStyleType.GLOW_POP, 0xFF000000);
         configSlotActive = new SlotStyleConfig(defaultFont, defaultTf, 0xFFFFEA00,
-                CaptionStyleOptions.CaptionStyleType.GLOW_POP, 0x00000000);
+                CaptionStyleOptions.CaptionStyleType.GLOW_POP, 0xFF000000);
         configSlotAfter = new SlotStyleConfig(defaultFont, defaultTf, 0xFFCCCCCC,
-                CaptionStyleOptions.CaptionStyleType.GLOW_POP, 0x00000000);
+                CaptionStyleOptions.CaptionStyleType.GLOW_POP, 0xFF000000);
 
         pickVideoLauncher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
@@ -140,6 +142,7 @@ public class MainActivity extends AppCompatActivity {
         fontStyleSpinner = findViewById(R.id.fontStyleSpinner);
         captionColorSpinner = findViewById(R.id.captionColorSpinner);
         captionStyleSpinner = findViewById(R.id.captionStyleSpinner);
+        boxColorButton = findViewById(R.id.boxColorButton);
 
         playPauseButton = findViewById(R.id.playPauseButton);
         videoSeekBar = findViewById(R.id.videoSeekBar);
@@ -176,6 +179,15 @@ public class MainActivity extends AppCompatActivity {
         setupFontSpinner();
         setupColorSpinner();
         setupStyleSpinner();
+
+        boxColorButton.setOnClickListener(v -> {
+            SlotStyleConfig current = getCurrentSlotConfig();
+            int initial = (current.boxColor != 0) ? current.boxColor : 0xFF000000;
+            showHueColorPickerDialog("Pick Box Background Color", initial, color -> {
+                current.boxColor = (color & 0x00FFFFFF) | 0xFF000000;
+                triggerManualCaptionRedraw();
+            });
+        });
 
         selectSlotTab(1);
 
@@ -717,6 +729,10 @@ public class MainActivity extends AppCompatActivity {
                 break;
             case BOUNCE:
                 span = new BounceSpan(effectiveColor);
+                break;
+            case BOX_HIGHLIGHT:
+                int boxBg = (config.boxColor != 0) ? config.boxColor : 0xFF000000;
+                span = new BackgroundBoxSpan(effectiveColor, boxBg, dpToPx(6));
                 break;
             case CUMULATIVE_BUILD_UP:
             case MINIMAL_CLEAN:
