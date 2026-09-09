@@ -54,6 +54,13 @@ public class AssSubtitleBuilder {
         int baseX = videoWidth / 2;
         int baseY = videoHeight - marginV;
 
+        // Safe horizontal band so a word can never render past the video
+        // edges (previously long "before"/"after" words got clipped off
+        // screen). safeMargin keeps a little breathing room too.
+        int safeMargin = Math.round(videoWidth * 0.02f);
+        int minSafeX = safeMargin;
+        int maxSafeX = videoWidth - safeMargin;
+
         boolean oneWordPunch = configActive.styleType == CaptionStyleOptions.CaptionStyleType.ONE_WORD_PUNCH;
         boolean cumulativeBuildUp = configActive.styleType == CaptionStyleOptions.CaptionStyleType.CUMULATIVE_BUILD_UP;
         List<CaptionGrouper.Group> groups = CaptionGrouper.group(captions, GROUP_SIZE);
@@ -79,7 +86,8 @@ public class AssSubtitleBuilder {
                             true, slot.scale, assFontSize, toAssColor(cfg.boxColor != 0 ? cfg.boxColor : 0xFF000000));
 
                     appendWordLine(sb, startTime, endTime, cap.word,
-                            slot, baseX, baseY, previewToVideoX, previewToVideoY, wordTag);
+                            slot, baseX, baseY, previewToVideoX, previewToVideoY, wordTag,
+                            assFontSize, minSafeX, maxSafeX);
                 }
             } else if (oneWordPunch) {
                 for (int j = 0; j < words.size(); j++) {
@@ -93,7 +101,8 @@ public class AssSubtitleBuilder {
                             true, activeSlot.scale, assFontSize, toAssColor(configActive.boxColor != 0 ? configActive.boxColor : 0xFF000000));
 
                     appendWordLine(sb, startTime, endTime, activeWord.word,
-                            activeSlot, baseX, baseY, previewToVideoX, previewToVideoY, tag);
+                            activeSlot, baseX, baseY, previewToVideoX, previewToVideoY, tag,
+                            assFontSize, minSafeX, maxSafeX);
                 }
             } else {
                 for (int j = 0; j < words.size(); j++) {
@@ -114,7 +123,8 @@ public class AssSubtitleBuilder {
                                 isSpeaking, slot.scale, assFontSize, toAssColor(cfg.boxColor != 0 ? cfg.boxColor : 0xFF000000));
 
                         appendWordLine(sb, startTime, endTime, cap.word,
-                                slot, baseX, baseY, previewToVideoX, previewToVideoY, wordTag);
+                                slot, baseX, baseY, previewToVideoX, previewToVideoY, wordTag,
+                                assFontSize, minSafeX, maxSafeX);
                     }
                 }
             }
@@ -126,10 +136,21 @@ public class AssSubtitleBuilder {
     private static void appendWordLine(
             StringBuilder sb, String startTime, String endTime, String word,
             CaptionSlotTransform slot, int baseX, int baseY,
-            float previewToVideoX, float previewToVideoY, String styleTag) {
+            float previewToVideoX, float previewToVideoY, String styleTag,
+            int fontSizePx, int minSafeX, int maxSafeX) {
 
         int posX = baseX + Math.round(slot.translationX * previewToVideoX);
         int posY = baseY + Math.round(slot.translationY * previewToVideoY);
+
+        // Rough estimated half-width of the rendered word (average glyph
+        // width ~0.42em, bold caption fonts run wide) so we can keep the
+        // whole word inside the video frame instead of letting it run off
+        // the left/right edge.
+        int estimatedHalfWidth = Math.round(word.length() * fontSizePx * 0.42f * (slot.scale > 0 ? slot.scale : 1f) / 2f);
+        int minX = Math.min(minSafeX + estimatedHalfWidth, (minSafeX + maxSafeX) / 2);
+        int maxX = Math.max(maxSafeX - estimatedHalfWidth, (minSafeX + maxSafeX) / 2);
+        if (posX < minX) posX = minX;
+        if (posX > maxX) posX = maxX;
 
         sb.append("Dialogue: 0,").append(startTime).append(",").append(endTime)
                 .append(",Default,,0,0,0,,")
@@ -172,10 +193,6 @@ public class AssSubtitleBuilder {
                 int cumScale = Math.round(baseScalePercent * 1.08f);
                 return base + "\\c" + colorAss + "\\fscx" + cumScale + "\\fscy" + cumScale + "\\b1";
             case BOX_HIGHLIGHT:
-                // libass has no native rounded-box tag, so we fake a solid
-                // background block by giving the glyphs a thick same-color
-                // outline (\bord) in the chosen box color — matches the
-                // BackgroundBoxSpan look used in the live preview.
                 int boxBord = Math.max(2, Math.round(fontSizePx * 0.22f));
                 return base + "\\1c" + colorAss + "\\3c" + boxColorAss
                         + "\\bord" + boxBord + "\\shad0\\fscx" + baseScalePercent + "\\fscy" + baseScalePercent + "\\b1";
