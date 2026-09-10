@@ -54,6 +54,19 @@ public class AssSubtitleBuilder {
         int baseX = videoWidth / 2;
         int baseY = videoHeight - marginV;
 
+        // FIX (stacking bug): previously every slot's X position was just
+        // "baseX + manual drag offset". Since the manual drag offset is
+        // 0 unless the user has actually dragged a slot in the preview,
+        // before/active/after words all landed on the SAME X position by
+        // default and libass stacked them vertically instead of showing
+        // them side by side like the live preview does. These natural
+        // cluster offsets restore that left/center/right spacing by
+        // default (still moves further if the user drags a slot).
+        int clusterSpread = Math.round(videoWidth * 0.24f);
+        int naturalOffsetBefore = -clusterSpread;
+        int naturalOffsetActive = 0;
+        int naturalOffsetAfter = clusterSpread;
+
         // Safe horizontal band so a word can never render past the video
         // edges (previously long "before"/"after" words got clipped off
         // screen). safeMargin keeps a little breathing room too.
@@ -79,6 +92,7 @@ public class AssSubtitleBuilder {
 
                     CaptionSlotTransform slot = (pos == 0) ? beforeSlot : (pos == 1 ? activeSlot : afterSlot);
                     SlotStyleConfig cfg = (pos == 1) ? configActive : (pos == 0 ? configBefore : configAfter);
+                    int natOffset = (pos == 0) ? naturalOffsetBefore : (pos == 1 ? naturalOffsetActive : naturalOffsetAfter);
 
                     int wordCol = cap.resolveColor(cfg.textColor);
                     String wordColAss = toAssColor(wordCol);
@@ -87,7 +101,7 @@ public class AssSubtitleBuilder {
 
                     appendWordLine(sb, startTime, endTime, cap.word,
                             slot, baseX, baseY, previewToVideoX, previewToVideoY, wordTag,
-                            assFontSize, minSafeX, maxSafeX);
+                            assFontSize, minSafeX, maxSafeX, natOffset);
                 }
             } else if (oneWordPunch) {
                 for (int j = 0; j < words.size(); j++) {
@@ -102,7 +116,7 @@ public class AssSubtitleBuilder {
 
                     appendWordLine(sb, startTime, endTime, activeWord.word,
                             activeSlot, baseX, baseY, previewToVideoX, previewToVideoY, tag,
-                            assFontSize, minSafeX, maxSafeX);
+                            assFontSize, minSafeX, maxSafeX, naturalOffsetActive);
                 }
             } else {
                 for (int j = 0; j < words.size(); j++) {
@@ -116,6 +130,7 @@ public class AssSubtitleBuilder {
 
                         SlotStyleConfig cfg = isSpeaking ? configActive : (pos < j ? configBefore : configAfter);
                         CaptionSlotTransform slot = (pos == 0) ? beforeSlot : (pos == 1 ? activeSlot : afterSlot);
+                        int natOffset = (pos == 0) ? naturalOffsetBefore : (pos == 1 ? naturalOffsetActive : naturalOffsetAfter);
 
                         int wordCol = cap.resolveColor(cfg.textColor);
                         String wordColAss = toAssColor(wordCol);
@@ -124,7 +139,7 @@ public class AssSubtitleBuilder {
 
                         appendWordLine(sb, startTime, endTime, cap.word,
                                 slot, baseX, baseY, previewToVideoX, previewToVideoY, wordTag,
-                                assFontSize, minSafeX, maxSafeX);
+                                assFontSize, minSafeX, maxSafeX, natOffset);
                     }
                 }
             }
@@ -137,9 +152,9 @@ public class AssSubtitleBuilder {
             StringBuilder sb, String startTime, String endTime, String word,
             CaptionSlotTransform slot, int baseX, int baseY,
             float previewToVideoX, float previewToVideoY, String styleTag,
-            int fontSizePx, int minSafeX, int maxSafeX) {
+            int fontSizePx, int minSafeX, int maxSafeX, int naturalOffsetX) {
 
-        int posX = baseX + Math.round(slot.translationX * previewToVideoX);
+        int posX = baseX + naturalOffsetX + Math.round(slot.translationX * previewToVideoX);
         int posY = baseY + Math.round(slot.translationY * previewToVideoY);
 
         // Rough estimated half-width of the rendered word (average glyph
@@ -172,7 +187,9 @@ public class AssSubtitleBuilder {
         switch (style) {
             case GLOW_POP:
                 int glowScale = Math.round(baseScalePercent * 1.12f);
-                return base + "\\c" + colorAss + "\\bord4\\shad0\\blur8\\3c" + colorAss
+                // Blur trimmed from 8 -> 4 so the glow stays legible
+                // instead of washing the letters into a soft blob.
+                return base + "\\c" + colorAss + "\\bord4\\shad0\\blur4\\3c" + colorAss
                         + "\\fscx" + glowScale + "\\fscy" + glowScale + "\\b1";
             case HIGHLIGHT_POP:
                 int popScale = Math.round(baseScalePercent * 1.18f);
@@ -202,12 +219,18 @@ public class AssSubtitleBuilder {
         }
     }
 
+    // FIX: this was missing the closing "&" that ASS color tags require
+    // (e.g. "&HAABBGGRR&"). Without it, libass could not reliably parse
+    // the color override on every word, so it silently fell back to the
+    // Style line's default color (white) — this is why exported captions
+    // showed up plain white/blurry instead of the colors configured in
+    // the app.
     private static String toAssColor(int argb) {
         int a = 255 - ((argb >> 24) & 0xFF);
         int r = (argb >> 16) & 0xFF;
         int g = (argb >> 8) & 0xFF;
         int b = argb & 0xFF;
-        return String.format(Locale.US, "&H%02X%02X%02X%02X", a, b, g, r);
+        return String.format(Locale.US, "&H%02X%02X%02X%02X&", a, b, g, r);
     }
 
     private static String toAssTime(float seconds) {
