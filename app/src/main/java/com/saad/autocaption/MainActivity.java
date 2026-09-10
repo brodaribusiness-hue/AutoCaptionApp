@@ -172,7 +172,21 @@ public class MainActivity extends AppCompatActivity {
 
         afterSlotGesture = new SlotGestureHelper(this);
         wordSlotAfter.setOnTouchListener(afterSlotGesture);
-
+// FIX: caps each slot's width to a proportion of the actual video
+        // preview size (computed at runtime, so it works on any screen
+        // size) — short words still cluster together naturally, but a
+        // very long word now wraps cleanly onto a 2nd line inside its own
+        // column instead of splitting mid-word or overflowing the screen.
+        videoPreviewContainer.post(() -> {
+            int containerWidth = videoPreviewContainer.getWidth();
+            if (containerWidth > 0) {
+                int sideMaxWidth = Math.round(containerWidth * 0.30f);
+                int activeMaxWidth = Math.round(containerWidth * 0.38f);
+                wordSlotBefore.setMaxWidth(sideMaxWidth);
+                wordSlotAfter.setMaxWidth(sideMaxWidth);
+                wordSlotActive.setMaxWidth(activeMaxWidth);
+            }
+        });
         generateCaptionsButton.setEnabled(false);
         exportButton.setEnabled(false);
 
