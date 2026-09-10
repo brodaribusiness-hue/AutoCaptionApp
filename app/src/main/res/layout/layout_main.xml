@@ -57,20 +57,20 @@
 
                 <TextView
                     android:id="@+id/wordSlotBefore"
-                    android:layout_width="0dp"
-                    android:layout_weight="1"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="#CCCCCC"
                     android:textSize="22sp"
                     android:paddingStart="4dp"
                     android:paddingEnd="4dp"
                     android:gravity="center"
-                    android:includeFontPadding="false" />
+                    android:minWidth="20dp"
+                    android:includeFontPadding="false"
+                    android:contentDescription="@string/desc_slot_before" />
 
                 <TextView
                     android:id="@+id/wordSlotActive"
-                    android:layout_width="0dp"
-                    android:layout_weight="1.15"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="#FFFF00"
                     android:textStyle="bold"
@@ -78,23 +78,24 @@
                     android:paddingStart="6dp"
                     android:paddingEnd="6dp"
                     android:gravity="center"
-                    android:includeFontPadding="false" />
+                    android:minWidth="20dp"
+                    android:includeFontPadding="false"
+                    android:contentDescription="@string/desc_slot_active" />
 
                 <TextView
                     android:id="@+id/wordSlotAfter"
-                    android:layout_width="0dp"
-                    android:layout_weight="1"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="#CCCCCC"
                     android:textSize="22sp"
                     android:paddingStart="4dp"
                     android:paddingEnd="4dp"
                     android:gravity="center"
-                    android:includeFontPadding="false" />
+                    android:minWidth="20dp"
+                    android:includeFontPadding="false"
+                    android:contentDescription="@string/desc_slot_after" />
 
             </LinearLayout>
-
-        </com.saad.autocaption.AspectRatioFrameLayout>
 
         <!-- Player Controls Bar -->
         <LinearLayout
